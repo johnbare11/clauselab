@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String         @id @default(cuid())
+  clerkId      String         @unique
+  name         String?
+  email        String         @unique
+  role         Role           @default(CANDIDATE)
+  plan         Plan           @default(FREE)
+  organisation String?
+  university   String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  submissions  Submission[]
+  progress     UserProgress[]
+}
+
+model Track {
+  id           String         @id @default(cuid())
+  name         String
+  slug         String         @unique
+  description  String
+  isPremium    Boolean        @default(false)
+  isXrplTrack  Boolean        @default(false)
+  icon         String?
+  createdAt    DateTime       @default(now())
+  challenges   Challenge[]
+  progress     UserProgress[]
+}
+
+model Challenge {
+  id                  String       @id @default(cuid())
+  title               String
+  slug                String       @unique
+  trackId             String
+  track               Track        @relation(fields: [trackId], references: [id])
+  mode                Mode
+  difficulty          Difficulty
+  description         String
+  scenario            String
+  publicRequirements  Json
+  starterMaterial     String?
+  starterMaterialType String?
+  expectedSolution    Json?
+  visibleTests        Json
+  hiddenTests         Json
+  scoringRubric       Json
+  modelAnswer         String
+  explanation         String
+  tags                String[]
+  isXrplRelated       Boolean      @default(false)
+  requiresXrplTestnet Boolean      @default(false)
+  xrplTxHash          String?
+  isPremium           Boolean      @default(false)
+  published           Boolean      @default(false)
+  estimatedMinutes    Int          @default(20)
+  maxScore            Int          @default(100)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  submissions         Submission[]
+}
+
+model Submission {
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id])
+  challengeId        String
+  challenge          Challenge @relation(fields: [challengeId], references: [id])
+  answerText         String?
+  answerJson         Json?
+  score              Int       @default(0)
+  maxScore           Int       @default(100)
+  visibleTestsPassed Int       @default(0)
+  visibleTestsTotal  Int       @default(0)
+  hiddenTestsPassed  Int       @default(0)
+  hiddenTestsTotal   Int       @default(0)
+  feedbackJson       Json?
+  aiUsed             Boolean   @default(false)
+  timeTakenSeconds   Int?
+  submittedAt        DateTime  @default(now())
+}
+
+model UserProgress {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id])
+  trackId             String
+  track               Track    @relation(fields: [trackId], references: [id])
+  totalScore          Int      @default(0)
+  challengesCompleted Int      @default(0)
+  averageScore        Float    @default(0)
+  hiddenTestPassRate  Float    @default(0)
+  xrplReadiness       Float    @default(0)
+  updatedAt           DateTime @updatedAt
+
+  @@unique([userId, trackId])
+}
+
+enum Role {
+  CANDIDATE
+  EMPLOYER
+  ADMIN
+}
+
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum Mode {
+  BUILD
+  MODIFY
+  DEBUG
+  OPTIMISE
+  AUDIT
+  AI_ASSISTED
+}
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
