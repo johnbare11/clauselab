@@ -4,9 +4,9 @@ import { db } from "@/lib/db"
 import { Nav } from "@/components/nav"
 import Link from "next/link"
 import { modeLabel, difficultyLabel } from "@/lib/utils"
-import type { Challenge, Track } from "@prisma/client"
+import type { Prisma } from "@prisma/client"
 
-type ChallengeWithTrack = Challenge & { track: Track }
+type ChallengeWithTrack = Prisma.ChallengeGetPayload<{ include: { track: true } }>
 
 export const dynamic = "force-dynamic"
 
