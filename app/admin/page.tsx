@@ -4,9 +4,12 @@ import { db } from "@/lib/db"
 import { Nav } from "@/components/nav"
 import Link from "next/link"
 import { modeLabel, difficultyLabel } from "@/lib/utils"
-import type { Prisma } from "@prisma/client"
 
-type ChallengeWithTrack = Prisma.ChallengeGetPayload<{ include: { track: true } }>
+type ChallengeWithTrack = {
+  id: string; title: string; slug: string; published: boolean
+  mode: string; difficulty: string; isXrplRelated: boolean; requiresXrplTestnet: boolean
+  track: { name: string }
+}
 
 export const dynamic = "force-dynamic"
 
