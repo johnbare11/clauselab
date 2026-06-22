@@ -4,6 +4,9 @@ import { db } from "@/lib/db"
 import { Nav } from "@/components/nav"
 import Link from "next/link"
 import { modeLabel, difficultyLabel } from "@/lib/utils"
+import type { Challenge, Track } from "@prisma/client"
+
+type ChallengeWithTrack = Challenge & { track: Track }
 
 export const dynamic = "force-dynamic"
 
@@ -38,7 +41,7 @@ export default async function AdminPage() {
           {[
             { label: "Challenges", value: challenges.length },
             { label: "Tracks", value: tracks.length },
-            { label: "Published", value: challenges.filter((c: { published: boolean }) => c.published).length },
+            { label: "Published", value: challenges.filter((c: ChallengeWithTrack) => c.published).length },
             { label: "Submissions", value: totalSubmissions },
           ].map((s) => (
             <div key={s.label} className="border border-[#1e1e1e] rounded p-4 bg-[#0d0d0d]">
@@ -57,7 +60,7 @@ export default async function AdminPage() {
             <span>Status</span>
             <span>Actions</span>
           </div>
-          {challenges.map((ch) => (
+          {(challenges as ChallengeWithTrack[]).map((ch) => (
             <div key={ch.id} className="grid grid-cols-[1fr_80px_90px_80px_70px_60px] items-center px-4 py-3 border-b border-[#1a1a1a] last:border-0 hover:bg-[#141414] transition-colors">
               <div>
                 <div className="text-white text-sm">{ch.title}</div>
