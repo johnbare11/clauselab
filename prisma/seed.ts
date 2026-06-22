@@ -1,12 +1,6 @@
 import { PrismaClient, Mode, Difficulty } from "@prisma/client"
-import { PrismaPg } from "@prisma/adapter-pg"
-import { Pool } from "pg"
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:51214/template1?sslmode=disable",
-})
-const adapter = new PrismaPg(pool)
-const prisma = new PrismaClient({ adapter } as any)
+const prisma = new PrismaClient()
 
 async function main() {
   console.log("Seeding ClauseRank database...")
