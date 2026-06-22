@@ -38,7 +38,7 @@ export default async function AdminPage() {
           {[
             { label: "Challenges", value: challenges.length },
             { label: "Tracks", value: tracks.length },
-            { label: "Published", value: challenges.filter(c => c.published).length },
+            { label: "Published", value: challenges.filter((c: { published: boolean }) => c.published).length },
             { label: "Submissions", value: totalSubmissions },
           ].map((s) => (
             <div key={s.label} className="border border-[#1e1e1e] rounded p-4 bg-[#0d0d0d]">
