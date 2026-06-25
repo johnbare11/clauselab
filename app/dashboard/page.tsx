@@ -9,10 +9,7 @@ import Link from "next/link"
 
 export const dynamic = "force-dynamic"
 
-export default async function DashboardPage() {
-  const { userId } = await auth()
-  if (!userId) redirect("/sign-in")
-
+async function loadDashboard(userId: string) {
   // Create the user row on first sign-in, then load with relations.
   await ensureUser()
 
@@ -28,18 +25,44 @@ export default async function DashboardPage() {
     },
   })
 
-  const totalScore = user?.progress.reduce((a, p) => a + p.totalScore, 0) || 0
-  const totalCompleted = user?.progress.reduce((a, p) => a + p.challengesCompleted, 0) || 0
-  const xrplProgress = user?.progress.filter(p => p.track.slug.startsWith("xrpl-")) || []
-  const xrplScore = xrplProgress.reduce((a, p) => a + p.totalScore, 0)
-  const xrplCompleted = xrplProgress.reduce((a, p) => a + p.challengesCompleted, 0)
-
   const recommendedChallenges = await db.challenge.findMany({
     where: { published: true },
     include: { track: true },
     orderBy: { isXrplRelated: "desc" },
     take: 4,
   })
+
+  return { user, recommendedChallenges }
+}
+
+export default async function DashboardPage() {
+  const { userId } = await auth()
+  if (!userId) redirect("/sign-in")
+
+  let data: Awaited<ReturnType<typeof loadDashboard>>
+  try {
+    data = await loadDashboard(userId)
+  } catch (err) {
+    // Surface the real error (Next.js redacts it from the digest-only page).
+    const e = err as Error
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black p-4">
+        <div className="border border-red-800 rounded p-6 max-w-3xl w-full">
+          <h1 className="text-red-400 text-sm font-mono mb-3">Dashboard load failed</h1>
+          <p className="text-white text-sm font-mono mb-4 break-all">{e?.name}: {e?.message}</p>
+          <pre className="text-gray-400 text-xs overflow-auto max-h-72 whitespace-pre-wrap">{e?.stack}</pre>
+        </div>
+      </div>
+    )
+  }
+
+  const { user, recommendedChallenges } = data
+
+  const totalScore = user?.progress.reduce((a, p) => a + p.totalScore, 0) || 0
+  const totalCompleted = user?.progress.reduce((a, p) => a + p.challengesCompleted, 0) || 0
+  const xrplProgress = user?.progress.filter(p => p.track.slug.startsWith("xrpl-")) || []
+  const xrplScore = xrplProgress.reduce((a, p) => a + p.totalScore, 0)
+  const xrplCompleted = xrplProgress.reduce((a, p) => a + p.challengesCompleted, 0)
 
   return (
     <div className="min-h-screen">
