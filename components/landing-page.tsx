@@ -45,9 +45,9 @@ export default function LandingPage() {
       <section className="border-b border-[#1e1e1e] py-12 px-4 bg-[#0a0a0a]">
         <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-8">
           {[
-            { icon: "🏛️", title: "The institutional gap", body: "Banks and asset managers want to adopt XRPL. They cannot find professionals who can verify that XRPL workflows match their legal obligations." },
-            { icon: "⚠️", title: "No standard benchmark", body: "Software engineers have HackerRank. Legal-tech professionals have nothing. There is no way to assess XRPL compliance competence." },
-            { icon: "✓", title: "ClauseLab closes it", body: "Realistic scenarios. Hidden test cases. Live Testnet data. A score that tells a bank or XRPL issuer whether a candidate can do the work." },
+            { icon: "📈", title: "A fast-widening skills gap", body: "As XRPL moves into mainstream finance, the legal and compliance work it demands is growing faster than the talent that can do it. Like AI a few years ago, these skills are quickly shifting from niche to essential, and most professionals do not have them yet." },
+            { icon: "⚖️", title: "Train, outsource, or hire", body: "Training someone in-house costs time and money. Handing it to a technical or cyber team without legal grounding loses the context that matters. Hiring people who already have the skill is faster and safer, if you can actually verify it." },
+            { icon: "✓", title: "ClauseLab verifies the skill", body: "Realistic scenarios, hidden test cases, and live Testnet data produce an objective score that shows whether a candidate can already do the work, before you commit to hiring or training them." },
           ].map((item) => (
             <div key={item.title}>
               <div className="text-2xl mb-3">{item.icon}</div>
