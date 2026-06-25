@@ -8,6 +8,7 @@ const isPublicRoute = createRouteMatcher([
   "/leaderboard(.*)",
   "/api/challenges(.*)",
   "/api/progress(.*)",
+  "/api/submissions/preview(.*)",
   "/api/xrpl(.*)",
 ])
 

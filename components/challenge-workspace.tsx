@@ -26,6 +26,7 @@ interface Challenge {
   scenario: string
   publicRequirements: Record<string, unknown>
   starterMaterial: string | null
+  modelAnswer: string
   estimatedMinutes: number
   maxScore: number
   visibleTests: TestCase[]
@@ -84,6 +85,37 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
     const m = Math.floor(s / 60)
     const sec = s % 60
     return `${m}:${sec.toString().padStart(2, "0")}`
+  }
+
+  // --- Demo helpers -------------------------------------------------------
+  // Builds a deliberately incomplete draft from the model answer: keeps the
+  // opening ~40% so early concepts pass but later (and hidden) tests fail,
+  // producing a realistic partial score to demonstrate progression.
+  const buildPartialDraft = (model: string): string => {
+    const lines = model.split("\n").filter((l) => l.trim().length > 0 || true)
+    const keep = Math.max(3, Math.ceil(lines.length * 0.4))
+    return lines.slice(0, keep).join("\n").trim()
+  }
+
+  const loadPartialDraft = () => {
+    setAnswer(buildPartialDraft(challenge.modelAnswer || ""))
+    setResult(null)
+    setVisibleRunResults(null)
+    setActiveTab("problem")
+  }
+
+  const loadModelAnswer = () => {
+    setAnswer(challenge.modelAnswer || "")
+    setResult(null)
+    setVisibleRunResults(null)
+    setActiveTab("problem")
+  }
+
+  const resetAnswer = () => {
+    setAnswer(challenge.starterMaterial || "")
+    setResult(null)
+    setVisibleRunResults(null)
+    setActiveTab("problem")
   }
 
   const runVisibleTests = async () => {
@@ -239,6 +271,23 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
             <span className="text-xs text-gray-600">Answer</span>
             <span className="text-xs text-gray-700">·</span>
             <span className="text-xs text-gray-600">{answer.length} chars</span>
+
+            {/* Demo controls — presentation aid for walkthroughs */}
+            <div className="ml-auto flex items-center gap-1.5">
+              <span className="text-[10px] uppercase tracking-widest text-amber-500/70 mr-1">Demo</span>
+              <button onClick={loadPartialDraft}
+                className="text-[11px] border border-amber-700/40 text-amber-300/90 hover:bg-amber-900/20 px-2 py-0.5 rounded transition-colors">
+                Partial draft
+              </button>
+              <button onClick={loadModelAnswer}
+                className="text-[11px] border border-emerald-700/40 text-emerald-300/90 hover:bg-emerald-900/20 px-2 py-0.5 rounded transition-colors">
+                Complete answer
+              </button>
+              <button onClick={resetAnswer}
+                className="text-[11px] border border-[#2a2a2a] text-gray-500 hover:text-gray-300 px-2 py-0.5 rounded transition-colors">
+                Reset
+              </button>
+            </div>
           </div>
           <textarea
             ref={textareaRef}
