@@ -5,10 +5,14 @@ import { usePathname } from "next/navigation"
 import { UserButton, useUser } from "@clerk/nextjs"
 import { cn } from "@/lib/utils"
 
-const navLinks = [
+const publicLinks = [
   { href: "/challenges", label: "Challenges" },
-  { href: "/dashboard", label: "Dashboard" },
   { href: "/leaderboard", label: "Leaderboard" },
+  { href: "/pricing", label: "Pricing" },
+]
+
+const authedLinks = [
+  { href: "/dashboard", label: "Dashboard" },
 ]
 
 export function Nav() {
@@ -21,22 +25,20 @@ export function Nav() {
         <div className="flex items-center gap-8">
           <Link href="/" className="font-semibold text-sm tracking-tight text-white flex items-center gap-2">
             <span className="text-blue-500 font-mono font-bold">&lt;/&gt;</span>
-            ClauseRank
+            ClauseLab
           </Link>
-          {isSignedIn && (
-            <nav className="flex items-center gap-1">
-              {navLinks.map((link) => (
-                <Link key={link.href} href={link.href}
-                  className={cn("px-3 py-1 rounded text-sm transition-colors",
-                    pathname.startsWith(link.href)
-                      ? "bg-[#1e1e1e] text-white"
-                      : "text-gray-400 hover:text-gray-200 hover:bg-[#1a1a1a]"
-                  )}>
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
-          )}
+          <nav className="flex items-center gap-1">
+            {[...publicLinks, ...(isSignedIn ? authedLinks : [])].map((link) => (
+              <Link key={link.href} href={link.href}
+                className={cn("px-3 py-1 rounded text-sm transition-colors",
+                  pathname.startsWith(link.href)
+                    ? "bg-[#1e1e1e] text-white"
+                    : "text-gray-400 hover:text-gray-200 hover:bg-[#1a1a1a]"
+                )}>
+                {link.label}
+              </Link>
+            ))}
+          </nav>
         </div>
         <div className="flex items-center gap-3">
           {!isSignedIn ? (

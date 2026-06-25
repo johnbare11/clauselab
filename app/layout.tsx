@@ -7,7 +7,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] })
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "ClauseRank — Legal Engineering & XRPL Assessment",
+  title: "ClauseLab — Legal Engineering & XRPL Assessment",
   description: "The assessment layer for XRPL institutional adoption. Train and certify legal, compliance, and fintech professionals on real-world digital asset scenarios.",
 }
 

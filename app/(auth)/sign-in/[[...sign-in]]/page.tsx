@@ -6,7 +6,7 @@ export default function SignInPage() {
       <div>
         <div className="text-center mb-6">
           <span className="text-blue-500 font-mono font-bold text-2xl">&lt;/&gt;</span>
-          <span className="text-white font-semibold text-xl ml-2">ClauseRank</span>
+          <span className="text-white font-semibold text-xl ml-2">ClauseLab</span>
         </div>
         <SignIn />
       </div>

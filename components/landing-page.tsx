@@ -47,7 +47,7 @@ export default function LandingPage() {
           {[
             { icon: "🏛️", title: "The institutional gap", body: "Banks and asset managers want to adopt XRPL. They cannot find professionals who can verify that XRPL workflows match their legal obligations." },
             { icon: "⚠️", title: "No standard benchmark", body: "Software engineers have HackerRank. Legal-tech professionals have nothing. There is no way to assess XRPL compliance competence." },
-            { icon: "✓", title: "ClauseRank closes it", body: "Realistic scenarios. Hidden test cases. Live Testnet data. A score that tells a bank or XRPL issuer whether a candidate can do the work." },
+            { icon: "✓", title: "ClauseLab closes it", body: "Realistic scenarios. Hidden test cases. Live Testnet data. A score that tells a bank or XRPL issuer whether a candidate can do the work." },
           ].map((item) => (
             <div key={item.title}>
               <div className="text-2xl mb-3">{item.icon}</div>
@@ -139,6 +139,31 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section className="border-b border-[#1e1e1e] py-12 px-4 bg-[#0a0a0a]">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-xs text-blue-400 font-mono uppercase tracking-widest mb-1">For employers</div>
+          <h2 className="text-xl font-semibold text-white mb-2">Assess candidates the way HackerRank assesses engineers</h2>
+          <p className="text-gray-500 text-sm max-w-2xl mb-8 leading-relaxed">
+            Send a real XRPL or compliance scenario to a candidate, and get back an objective,
+            hidden-test-graded score instead of a CV and a hunch.
+          </p>
+          <div className="grid md:grid-cols-3 gap-4 mb-8">
+            {[
+              { step: "1", title: "Pick a challenge set", body: "Choose from the library or author your own scenarios mapped to the role you're hiring for." },
+              { step: "2", title: "Send an invite link", body: "Share a link with the candidate. No account setup or installation on their side." },
+              { step: "3", title: "Review scored results", body: "See visible and hidden test results, missed requirements, and a benchmarked score." },
+            ].map((s) => (
+              <div key={s.step} className="border border-[#1e1e1e] rounded p-4 bg-[#0d0d0d]">
+                <div className="text-blue-400 font-mono text-sm mb-2">{s.step}</div>
+                <div className="text-white text-sm font-medium mb-1">{s.title}</div>
+                <div className="text-gray-600 text-xs leading-relaxed">{s.body}</div>
+              </div>
+            ))}
+          </div>
+          <Link href="/pricing" className="text-sm text-blue-400 hover:text-blue-300 transition-colors">See employer pricing →</Link>
+        </div>
+      </section>
+
       <section className="py-16 px-4">
         <div className="max-w-5xl mx-auto text-center">
           <h2 className="text-2xl font-semibold text-white mb-3">Built for law firms, banks, and digital asset companies</h2>
@@ -149,7 +174,7 @@ export default function LandingPage() {
 
       <footer className="border-t border-[#1e1e1e] py-6 px-4 bg-[#0a0a0a]">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2 text-xs text-gray-600">
-          <span>ClauseRank · Assessment infrastructure for the XRPL ecosystem</span>
+          <span>ClauseLab · Assessment infrastructure for the XRPL ecosystem</span>
           <span>For education and assessment only. Not legal advice. All scenarios are synthetic.</span>
         </div>
       </footer>

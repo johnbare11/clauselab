@@ -70,7 +70,7 @@ export default async function DashboardPage() {
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-xl font-semibold text-white mb-1">Dashboard</h1>
-          <p className="text-gray-500 text-sm">{user?.email || "Your ClauseRank progress"}</p>
+          <p className="text-gray-500 text-sm">{user?.email || "Your ClauseLab progress"}</p>
         </div>
 
         {/* Stats */}

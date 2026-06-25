@@ -3,7 +3,7 @@ import { PrismaClient, Mode, Difficulty } from "@prisma/client"
 const prisma = new PrismaClient()
 
 async function main() {
-  console.log("Seeding ClauseRank database...")
+  console.log("Seeding ClauseLab database...")
 
   // Tracks
   const tracks = await Promise.all([
@@ -586,7 +586,94 @@ async function main() {
     })
   }
 
-  console.log(`Seeded ${tracks.length} tracks and ${challenges.length} challenges.`)
+  // --- Demo leaderboard ---------------------------------------------------
+  // Synthetic candidates so the leaderboard shows what a populated, popular
+  // product looks like. All flagged with organisation "Demo Cohort" and a
+  // demo_ clerkId prefix so they are obviously not real accounts and can be
+  // cleared in one query. Idempotent via upsert.
+  const trackBySlug = new Map((await prisma.track.findMany()).map((t) => [t.slug, t]))
+
+  const demoCandidates: {
+    clerkId: string
+    name: string
+    email: string
+    progress: { slug: string; totalScore: number; completed: number }[]
+  }[] = [
+    { clerkId: "demo_lead_01", name: "Amara Okafor", email: "amara.okafor@demo.clauselab.io", progress: [
+      { slug: "xrpl-payments", totalScore: 285, completed: 3 },
+      { slug: "xrpl-escrow", totalScore: 274, completed: 3 },
+      { slug: "compliance-risk", totalScore: 188, completed: 2 },
+    ] },
+    { clerkId: "demo_lead_02", name: "Yusuf Rahman", email: "yusuf.rahman@demo.clauselab.io", progress: [
+      { slug: "xrpl-compliance", totalScore: 268, completed: 3 },
+      { slug: "xrpl-payments", totalScore: 246, completed: 3 },
+      { slug: "legal-engineering", totalScore: 171, completed: 2 },
+    ] },
+    { clerkId: "demo_lead_03", name: "Mei-Ling Chen", email: "meiling.chen@demo.clauselab.io", progress: [
+      { slug: "xrpl-tokenisation", totalScore: 259, completed: 3 },
+      { slug: "xrpl-identity", totalScore: 233, completed: 3 },
+      { slug: "ai-assisted-legal", totalScore: 162, completed: 2 },
+    ] },
+    { clerkId: "demo_lead_04", name: "Tomás Herrera", email: "tomas.herrera@demo.clauselab.io", progress: [
+      { slug: "xrpl-escrow", totalScore: 242, completed: 3 },
+      { slug: "compliance-risk", totalScore: 197, completed: 2 },
+    ] },
+    { clerkId: "demo_lead_05", name: "Priya Nair", email: "priya.nair@demo.clauselab.io", progress: [
+      { slug: "xrpl-payments", totalScore: 231, completed: 3 },
+      { slug: "legal-engineering", totalScore: 184, completed: 2 },
+    ] },
+    { clerkId: "demo_lead_06", name: "Daniel Kovač", email: "daniel.kovac@demo.clauselab.io", progress: [
+      { slug: "compliance-risk", totalScore: 216, completed: 3 },
+      { slug: "xrpl-identity", totalScore: 158, completed: 2 },
+    ] },
+    { clerkId: "demo_lead_07", name: "Sofia Almeida", email: "sofia.almeida@demo.clauselab.io", progress: [
+      { slug: "xrpl-tokenisation", totalScore: 205, completed: 2 },
+      { slug: "xrpl-payments", totalScore: 161, completed: 2 },
+    ] },
+    { clerkId: "demo_lead_08", name: "Kwame Mensah", email: "kwame.mensah@demo.clauselab.io", progress: [
+      { slug: "ai-assisted-legal", totalScore: 192, completed: 2 },
+      { slug: "legal-engineering", totalScore: 149, completed: 2 },
+    ] },
+    { clerkId: "demo_lead_09", name: "Hannah Schmidt", email: "hannah.schmidt@demo.clauselab.io", progress: [
+      { slug: "xrpl-compliance", totalScore: 178, completed: 2 },
+    ] },
+    { clerkId: "demo_lead_10", name: "Ravi Deshpande", email: "ravi.deshpande@demo.clauselab.io", progress: [
+      { slug: "xrpl-escrow", totalScore: 164, completed: 2 },
+    ] },
+    { clerkId: "demo_lead_11", name: "Clara Dubois", email: "clara.dubois@demo.clauselab.io", progress: [
+      { slug: "legal-engineering", totalScore: 142, completed: 2 },
+    ] },
+    { clerkId: "demo_lead_12", name: "Omar Haddad", email: "omar.haddad@demo.clauselab.io", progress: [
+      { slug: "xrpl-payments", totalScore: 128, completed: 1 },
+    ] },
+  ]
+
+  for (const cand of demoCandidates) {
+    const user = await prisma.user.upsert({
+      where: { clerkId: cand.clerkId },
+      update: { name: cand.name, organisation: "Demo Cohort" },
+      create: { clerkId: cand.clerkId, name: cand.name, email: cand.email, organisation: "Demo Cohort" },
+    })
+    for (const pr of cand.progress) {
+      const track = trackBySlug.get(pr.slug)
+      if (!track) continue
+      await prisma.userProgress.upsert({
+        where: { userId_trackId: { userId: user.id, trackId: track.id } },
+        update: { totalScore: pr.totalScore, challengesCompleted: pr.completed },
+        create: {
+          userId: user.id,
+          trackId: track.id,
+          totalScore: pr.totalScore,
+          challengesCompleted: pr.completed,
+          averageScore: Math.round(pr.totalScore / pr.completed),
+          hiddenTestPassRate: 0.7,
+          xrplReadiness: pr.slug.startsWith("xrpl-") ? 78 : 0,
+        },
+      })
+    }
+  }
+
+  console.log(`Seeded ${tracks.length} tracks, ${challenges.length} challenges, and ${demoCandidates.length} demo leaderboard candidates.`)
 }
 
 main()
