@@ -573,6 +573,47 @@ async function main() {
       estimatedMinutes: 35,
       maxScore: 100,
     },
+    {
+      title: "Build an XRPL KYC-Gated Identity Workflow",
+      slug: "build-xrpl-kyc-gated-identity-workflow",
+      trackId: trackMap["xrpl-identity"],
+      mode: Mode.BUILD,
+      difficulty: Difficulty.ADVANCED,
+      description: "Design a reusable digital identity workflow that gates access to a regulated XRPL product using on-ledger credentials, without putting personal data on the ledger.",
+      scenario: `A regulated digital asset platform issues a tokenised money-market fund on the XRP Ledger. Only KYC-verified, eligible investors may receive or hold the token.\n\nRather than maintain a centralised whitelist, the platform wants to use XRPL-native identity primitives so a verified investor can prove eligibility across multiple products. You will design the end-to-end workflow.\n\nThe design must cover:\n- How a verified credential is issued to an investor after KYC\n- How eligibility is checked on-ledger before access is granted\n- How personal data is kept off the ledger for privacy\n- What happens when KYC lapses, expires, or a sanctions hit occurs\n- How access is technically enforced on the XRPL account`,
+      publicRequirements: {
+        xrplMechanisms: ["Decentralized Identifier (DID)", "Verifiable Credential", "DepositAuth", "Credential acceptance"],
+        requirements: [
+          "Trusted issuer grants a credential after KYC",
+          "On-ledger eligibility check before transacting",
+          "No personal data (PII) stored on the ledger",
+          "Credential expiry and renewal",
+          "Revocation on lapsed KYC or sanctions match",
+          "Access enforced at the XRPL account level",
+        ],
+      },
+      starterMaterial: null,
+      visibleTests: [
+        { id: "vt1", description: "Credential issued by a trusted issuer after KYC", type: "concept", concepts: ["credential", "kyc"], weight: 10, isVisible: true },
+        { id: "vt2", description: "Verifiable credential used to prove eligibility", type: "concept", concepts: ["verifiable credential"], weight: 10, isVisible: true },
+        { id: "vt3", description: "Personal data kept off-ledger for privacy", type: "concept", concepts: ["privacy", "pii"], weight: 10, isVisible: true },
+      ],
+      hiddenTests: [
+        { id: "ht1", description: "Revocation pathway on lapsed KYC or sanctions match", type: "concept", concepts: ["revocation"], weight: 15, isVisible: false },
+        { id: "ht2", description: "Credential expiry and renewal handled", type: "concept", concepts: ["expiry", "renewal"], weight: 15, isVisible: false },
+        { id: "ht3", description: "DepositAuth used to gate the XRPL account", type: "concept", concepts: ["depositauth"], weight: 15, isVisible: false },
+        { id: "ht4", description: "Sanctions screening tied to credential validity", type: "concept", concepts: ["sanctions", "screening"], weight: 10, isVisible: false },
+        { id: "ht5", description: "Decentralized Identifier anchors the off-ledger identity", type: "concept", concepts: ["decentralized identifier"], weight: 15, isVisible: false },
+      ],
+      scoringRubric: { totalWeight: 100, passMark: 65 },
+      modelAnswer: `XRPL KYC-GATED IDENTITY WORKFLOW - TOKENISED FUND ACCESS\n\n1. IDENTITY ANCHOR (off-ledger PII, on-ledger reference):\n- Each investor is anchored by a Decentralized Identifier (DID) registered on the XRPL via the DID amendment.\n- The DID document points to an off-ledger identity store. No personal data (PII) is ever written to the ledger; only hashes and references are on-chain to protect privacy.\n\n2. CREDENTIAL ISSUANCE (after KYC):\n- The platform's compliance team completes KYC: identity document, proof of address, eligibility classification.\n- Sanctions screening (HMT + OFAC) and PEP screening are run.\n- On success, a trusted issuer issues a Verifiable Credential to the investor's DID, attesting: kyc_passed, investor_eligible, sanctions_cleared, issued_at, expiry date.\n- The credential is recorded on-ledger using the XRPL Credentials feature; the investor accepts it on their account.\n\n3. ON-LEDGER ELIGIBILITY CHECK (before access):\n- The issuing account sets DepositAuth and authorises only accounts that hold a valid, accepted credential from the trusted issuer.\n- Before any token transfer, the platform verifies the recipient holds a current Verifiable Credential that has not expired and has not been revoked.\n- Access is therefore enforced at the XRPL account level via DepositAuth plus credential verification, not a centralised whitelist.\n\n4. EXPIRY AND RENEWAL:\n- Each credential carries an expiry date. On expiry the credential is no longer valid and access stops.\n- Renewal requires a refreshed KYC review and re-screening, after which a new credential is issued and the old one replaced.\n\n5. REVOCATION:\n- If KYC lapses, eligibility changes, or a sanctions match occurs, the issuer performs revocation of the credential.\n- Revocation immediately invalidates on-ledger access; DepositAuth authorisation for that account is removed so it can no longer receive the token.\n\n6. ONGOING SANCTIONS SCREENING:\n- Sanctions screening runs continuously, not just at onboarding. A new screening hit triggers revocation and blocks further transfers.\n\nPRIVACY SUMMARY:\n- PII off-ledger, credentials and DID references on-ledger, reusable across products without re-disclosing personal data.`,
+      explanation: "XRPL DIDs and Credentials let a platform gate access by verifiable eligibility rather than a centralised list, while DepositAuth enforces it at the account level. Personal data stays off-ledger; only credential references and revocation status are on-chain.",
+      tags: ["XRPL", "identity", "DID", "credentials", "KYC", "DepositAuth", "privacy"],
+      isXrplRelated: true,
+      requiresXrplTestnet: false,
+      estimatedMinutes: 35,
+      maxScore: 100,
+    },
   ]
 
   for (const ch of challenges) {
