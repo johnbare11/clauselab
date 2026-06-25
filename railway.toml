@@ -1,0 +1,14 @@
+# Railway deployment configuration for ClauseLab
+# Docs: https://docs.railway.com/reference/config-as-code
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+# Runs after build, before the new version goes live, with full env + network
+# access to Neon. Syncs the Prisma schema and seeds tracks/challenges.
+# The seed is idempotent (upsert-by-slug), so this is safe on every deploy.
+preDeployCommand = "npm run db:setup"
+startCommand = "npm run start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
