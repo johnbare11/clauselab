@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server"
 import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
+import { ensureUser } from "@/lib/user"
 import { Nav } from "@/components/nav"
 import { Badge } from "@/components/badge"
 import { difficultyColor, difficultyLabel, modeLabel, scorePercent } from "@/lib/utils"
@@ -12,7 +13,10 @@ export default async function DashboardPage() {
   const { userId } = await auth()
   if (!userId) redirect("/sign-in")
 
-  let user = await db.user.findUnique({
+  // Create the user row on first sign-in, then load with relations.
+  await ensureUser()
+
+  const user = await db.user.findUnique({
     where: { clerkId: userId },
     include: {
       progress: { include: { track: true } },
@@ -23,21 +27,6 @@ export default async function DashboardPage() {
       },
     },
   })
-
-  if (!user) {
-    await fetch(`${process.env.NEXT_PUBLIC_URL || "http://localhost:3000"}/api/user/sync`, { method: "POST" }).catch(() => {})
-    user = await db.user.findUnique({
-      where: { clerkId: userId },
-      include: {
-        progress: { include: { track: true } },
-        submissions: {
-          include: { challenge: { include: { track: true } } },
-          orderBy: { submittedAt: "desc" },
-          take: 10,
-        },
-      },
-    })
-  }
 
   const totalScore = user?.progress.reduce((a, p) => a + p.totalScore, 0) || 0
   const totalCompleted = user?.progress.reduce((a, p) => a + p.challengesCompleted, 0) || 0

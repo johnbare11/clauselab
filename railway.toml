@@ -2,10 +2,10 @@
 # Docs: https://docs.railway.com/reference/config-as-code
 
 [deploy]
-# Runs after build, before the new version goes live, with full env + network
-# access to Neon. Syncs the Prisma schema and seeds tracks/challenges.
-# The seed is idempotent (upsert-by-slug), so this is safe on every deploy.
-preDeployCommand = "npm run db:setup"
-startCommand = "npm run start"
+# Sync the Prisma schema to Neon and seed tracks/challenges, then start the app.
+# Done in the start command (not preDeployCommand) so it runs deterministically
+# on boot with full network access to Neon. The seed is idempotent
+# (upsert-by-slug), so this is safe to run on every start/restart.
+startCommand = "npm run db:setup && npm run start"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
