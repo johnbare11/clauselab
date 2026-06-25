@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Nav } from "@/components/nav"
+import { DemoBanner } from "@/components/demo-banner"
 import { useRouter } from "next/navigation"
 
 export default function NewChallengePage() {
@@ -67,6 +68,7 @@ export default function NewChallengePage() {
   return (
     <div className="min-h-screen">
       <Nav />
+      <DemoBanner />
       <div className="max-w-3xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-xl font-semibold text-white">New Challenge</h1>

@@ -1,5 +1,5 @@
 export function formatXrpAmount(drops: string | undefined): string {
-  if (!drops) return "—"
+  if (!drops) return "-"
   const xrp = parseInt(drops) / 1_000_000
   return `${xrp.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} XRP`
 }

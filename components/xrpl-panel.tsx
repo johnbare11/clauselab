@@ -14,7 +14,7 @@ export function XrplPanel({ transaction, ledgerInfo, txHash }: XrplPanelProps) {
     <div className="border border-blue-900/50 rounded bg-[#0a0f1a] p-4 text-xs font-mono">
       <div className="flex items-center gap-2 mb-3">
         <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-        <span className="text-blue-400 font-semibold text-xs uppercase tracking-wider">XRPL Testnet — Live Data</span>
+        <span className="text-blue-400 font-semibold text-xs uppercase tracking-wider">XRPL Testnet - Live Data</span>
       </div>
 
       {ledgerInfo && (
@@ -51,7 +51,7 @@ export function XrplPanel({ transaction, ledgerInfo, txHash }: XrplPanelProps) {
         <div className="text-gray-500">
           <div className="text-gray-600 uppercase text-[10px] tracking-widest mb-2">Sample Transaction</div>
           <Row label="Hash" value={`${txHash.slice(0, 20)}...`} />
-          <div className="mt-2 text-gray-600 text-[10px]">Live data unavailable — Testnet connection required</div>
+          <div className="mt-2 text-gray-600 text-[10px]">Live data unavailable - Testnet connection required</div>
         </div>
       ) : (
         <div className="space-y-1.5">

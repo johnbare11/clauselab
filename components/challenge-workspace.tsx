@@ -210,7 +210,7 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
                         <ul className="space-y-1">
                           {(value as unknown[]).map((v, i) => (
                             <li key={i} className="text-gray-300 text-xs flex gap-2">
-                              <span className="text-gray-600 shrink-0">—</span>
+                              <span className="text-gray-600 shrink-0">-</span>
                               <span>{typeof v === "object" ? JSON.stringify(v) : String(v)}</span>
                             </li>
                           ))}
@@ -272,7 +272,7 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
             <span className="text-xs text-gray-700">·</span>
             <span className="text-xs text-gray-600">{answer.length} chars</span>
 
-            {/* Demo controls — presentation aid for walkthroughs */}
+            {/* Demo controls - presentation aid for walkthroughs */}
             <div className="ml-auto flex items-center gap-1.5">
               <span className="text-[10px] uppercase tracking-widest text-amber-500/70 mr-1">Demo</span>
               <button onClick={loadPartialDraft}
@@ -402,7 +402,7 @@ function ResultsPanel({ result, maxScore }: { result: SubmissionResult; maxScore
           <div className="text-xs text-gray-500 uppercase tracking-widest mb-2">Missed Requirements</div>
           <div className="border border-[#1e1e1e] rounded p-3 bg-[#0a0a0a] space-y-1">
             {result.feedback.missedRequirements.map((m, i) => (
-              <div key={i} className="text-xs text-amber-400/80 flex gap-2"><span>—</span><span>{m}</span></div>
+              <div key={i} className="text-xs text-amber-400/80 flex gap-2"><span>-</span><span>{m}</span></div>
             ))}
           </div>
         </div>

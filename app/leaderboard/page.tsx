@@ -39,7 +39,7 @@ export default async function LeaderboardPage() {
         <div className="mb-8">
           <h1 className="text-xl font-semibold text-white mb-1">Leaderboard</h1>
           <p className="text-gray-500 text-sm">Global rankings by total score</p>
-          <p className="text-xs text-amber-500/70 mt-2">Demo cohort — illustrative sample data for evaluation.</p>
+          <p className="text-xs text-amber-500/70 mt-2">Demo cohort - illustrative sample data for evaluation.</p>
         </div>
 
         <div className="border border-[#1e1e1e] rounded overflow-hidden">

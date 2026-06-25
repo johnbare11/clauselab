@@ -3,7 +3,7 @@ import { Badge } from "@/components/badge"
 import Link from "next/link"
 
 export const metadata = {
-  title: "Pricing — ClauseLab",
+  title: "Pricing - ClauseLab",
 }
 
 const tiers = [
@@ -104,7 +104,7 @@ export default function PricingPage() {
           ))}
         </div>
         <p className="text-center text-xs text-gray-600 mt-8 max-w-xl mx-auto">
-          Pricing shown is indicative for evaluation. All scenarios are synthetic and for assessment only — not legal advice.
+          Pricing shown is indicative for evaluation. All scenarios are synthetic and for assessment only - not legal advice.
         </p>
       </section>
     </div>

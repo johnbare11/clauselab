@@ -168,7 +168,7 @@ export default function LandingPage() {
         <div className="max-w-5xl mx-auto text-center">
           <h2 className="text-2xl font-semibold text-white mb-3">Built for law firms, banks, and digital asset companies</h2>
           <p className="text-gray-500 text-sm mb-6 max-w-lg mx-auto">Identify professionals who can work with XRPL infrastructure, verify compliance logic, and translate legal intent into executable systems.</p>
-          <Link href="/sign-up" className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded text-sm font-medium transition-colors">Start free — no credit card required</Link>
+          <Link href="/sign-up" className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded text-sm font-medium transition-colors">Start free - no credit card required</Link>
         </div>
       </section>
 

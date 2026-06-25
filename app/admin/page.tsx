@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server"
 import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { Nav } from "@/components/nav"
+import { DemoBanner } from "@/components/demo-banner"
 import Link from "next/link"
 import { modeLabel, difficultyLabel } from "@/lib/utils"
 
@@ -28,16 +29,27 @@ export default async function AdminPage() {
   return (
     <div className="min-h-screen">
       <Nav />
+      <DemoBanner />
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-xl font-semibold text-white">Admin</h1>
             <p className="text-gray-500 text-sm">Challenge management and platform analytics</p>
           </div>
-          <Link href="/admin/challenges/new"
-            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm font-medium transition-colors">
-            + New challenge
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/admin/send"
+              className="border border-[#2a2a2a] hover:border-[#3a3a3a] text-gray-200 px-4 py-2 rounded text-sm transition-colors">
+              Send assessment
+            </Link>
+            <Link href="/admin/results"
+              className="border border-[#2a2a2a] hover:border-[#3a3a3a] text-gray-200 px-4 py-2 rounded text-sm transition-colors">
+              Candidate results
+            </Link>
+            <Link href="/admin/challenges/new"
+              className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm font-medium transition-colors">
+              + New challenge
+            </Link>
+          </div>
         </div>
 
         <div className="grid grid-cols-4 gap-3 mb-8">
