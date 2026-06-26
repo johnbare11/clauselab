@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 import { Nav } from "@/components/nav"
 import { ChallengeWorkspace } from "@/components/challenge-workspace"
 import { fetchLedgerInfo } from "@/lib/xrpl"
+import { isExecutionSpec } from "@/lib/exec/grade"
 
 export const dynamic = "force-dynamic"
 
@@ -25,9 +26,14 @@ export default async function ChallengePage({ params }: Props) {
     ledgerInfo = await fetchLedgerInfo()
   }
 
+  const isExecutable = isExecutionSpec(challenge.expectedSolution)
+
+  // Never ship expectedSolution to the client - it holds the expected values.
   const safeChallenge = {
     ...challenge,
     hiddenTests: [],
+    expectedSolution: null,
+    isExecutable,
   }
 
   return (

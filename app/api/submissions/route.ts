@@ -2,6 +2,9 @@ import { auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { scoreSubmission, TestCase } from "@/lib/scoring"
+import { gradeExecution, isExecutionSpec, ExecutionTest } from "@/lib/exec/grade"
+
+export const runtime = "nodejs"
 
 export async function POST(req: NextRequest) {
   const { userId } = await auth()
@@ -25,7 +28,15 @@ export async function POST(req: NextRequest) {
     ...(challenge.hiddenTests as unknown as TestCase[]).map((t: TestCase) => ({ ...t, isVisible: false })),
   ]
 
-  const result = scoreSubmission(answerText, answerJson, allTests, challenge.maxScore)
+  // Executable challenges run the candidate's code and grade on the actual XRPL
+  // transaction it produces (optionally submitted live on Testnet). Everything
+  // else uses the rule-based concept scorer. Both return the same shape.
+  const spec = challenge.expectedSolution
+  const grade = isExecutionSpec(spec)
+    ? await gradeExecution(answerText, spec, allTests as unknown as ExecutionTest[], challenge.maxScore)
+    : scoreSubmission(answerText, answerJson, allTests, challenge.maxScore)
+  const result = grade
+  const live = "live" in grade ? grade.live : undefined
 
   const submission = await db.submission.create({
     data: {
@@ -45,6 +56,7 @@ export async function POST(req: NextRequest) {
         improvementSuggestions: result.improvementSuggestions,
         modelAnswer: challenge.modelAnswer,
         explanation: challenge.explanation,
+        live: live || null,
       })),
       timeTakenSeconds: timeTakenSeconds || null,
     },

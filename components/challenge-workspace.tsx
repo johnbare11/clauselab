@@ -34,6 +34,19 @@ interface Challenge {
   isXrplRelated: boolean
   requiresXrplTestnet: boolean
   xrplTxHash: string | null
+  isExecutable?: boolean
+  starterMaterialType?: string | null
+}
+
+interface LiveArtifacts {
+  attempted: boolean
+  available: boolean
+  createHash?: string
+  createResult?: string
+  finishHash?: string
+  finishResult?: string
+  explorer?: string
+  note?: string
 }
 
 interface TestResult {
@@ -55,6 +68,7 @@ interface SubmissionResult {
     improvementSuggestions: string[]
     modelAnswer: string
     explanation: string
+    live?: LiveArtifacts | null
   }
 }
 
@@ -240,7 +254,7 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
           )}
 
           {activeTab === "results" && result && (
-            <ResultsPanel result={result} maxScore={challenge.maxScore} />
+            <ResultsPanel result={result} maxScore={challenge.maxScore} isExecutable={challenge.isExecutable} />
           )}
         </div>
       </div>
@@ -256,11 +270,12 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
           <div className="flex items-center gap-2">
             <button onClick={runVisibleTests}
               className="text-xs border border-[#2a2a2a] hover:border-[#3a3a3a] text-gray-300 px-3 py-1 rounded transition-colors">
-              Run visible tests
+              {challenge.isExecutable ? "Run code" : "Run visible tests"}
             </button>
             <button onClick={submit} disabled={submitting || !answer.trim()}
+              title={challenge.isExecutable ? "Runs your code and grades the XRPL transaction it produces" : undefined}
               className="text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-1 rounded transition-colors font-medium">
-              {submitting ? "Submitting..." : "Submit"}
+              {submitting ? (challenge.isExecutable ? "Executing..." : "Submitting...") : "Submit"}
             </button>
           </div>
         </div>
@@ -268,7 +283,7 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
         {/* Editor */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="border-b border-[#1a1a1a] px-4 py-1.5 flex items-center gap-2 bg-[#0d0d0d]">
-            <span className="text-xs text-gray-600">Answer</span>
+            <span className="text-xs text-gray-600">{challenge.isExecutable ? "Code · TypeScript (xrpl.js)" : "Answer"}</span>
             <span className="text-xs text-gray-700">·</span>
             <span className="text-xs text-gray-600">{answer.length} chars</span>
 
@@ -338,11 +353,12 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
   )
 }
 
-function ResultsPanel({ result, maxScore }: { result: SubmissionResult; maxScore: number }) {
+function ResultsPanel({ result, maxScore, isExecutable }: { result: SubmissionResult; maxScore: number; isExecutable?: boolean }) {
   const pct = scorePercent(result.score, maxScore)
   const allResults = result.feedback?.results || []
   const hidden = allResults.filter(r => !r.isVisible)
   const visible = allResults.filter(r => r.isVisible)
+  const live = result.feedback?.live
 
   return (
     <div className="space-y-4">
@@ -362,6 +378,40 @@ function ResultsPanel({ result, maxScore }: { result: SubmissionResult; maxScore
           <span>{pct >= 70 ? "Pass" : pct >= 50 ? "Partial" : "Needs improvement"}</span>
         </div>
       </div>
+
+      {isExecutable && (
+        <div className="border border-[#1e1e1e] rounded p-3 bg-[#0a0a0a]">
+          <div className="flex items-center gap-2 mb-2">
+            <span className={`w-1.5 h-1.5 rounded-full ${live?.available ? "bg-emerald-400" : "bg-gray-600"}`} />
+            <span className="text-xs text-gray-400 uppercase tracking-widest">XRPL Testnet execution</span>
+          </div>
+          {live?.available ? (
+            <div className="space-y-1.5 text-xs font-mono">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-gray-500">EscrowCreate</span>
+                <span className={live.createResult?.startsWith("tes") ? "text-emerald-400" : "text-red-400"}>{live.createResult}</span>
+              </div>
+              {live.finishResult && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-gray-500">EscrowFinish (immediate)</span>
+                  <span className={live.finishResult.startsWith("tes") ? "text-red-400" : "text-emerald-400"}>
+                    {live.finishResult.startsWith("tes") ? `${live.finishResult} (released too early!)` : `${live.finishResult} (rejected ✓)`}
+                  </span>
+                </div>
+              )}
+              {live.explorer && (
+                <a href={live.explorer} target="_blank" rel="noopener noreferrer" className="inline-block text-blue-400 hover:text-blue-300 mt-1 break-all">
+                  View on Testnet explorer →
+                </a>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-600">
+              {live?.note || "Graded on the XRPL transaction your code produced. Live on-ledger execution runs when enabled on the server."}
+            </p>
+          )}
+        </div>
+      )}
 
       {visible.length > 0 && (
         <div>

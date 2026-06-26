@@ -614,6 +614,86 @@ async function main() {
       estimatedMinutes: 35,
       maxScore: 100,
     },
+
+    // ─── XRPL ESCROW (EXECUTABLE / CODE) ─────────────────────────────────
+    // Flagship code challenge: the candidate fixes real xrpl.js logic. The
+    // submission runs their code and grades the actual XRPL transaction it
+    // produces; with XRPL_LIVE_GRADING enabled it is submitted to Testnet.
+    {
+      title: "Fix the Escrow That Passes Code Review but Fails Compliance",
+      slug: "fix-xrpl-escrow-compliance-bug",
+      trackId: trackMap["xrpl-escrow"],
+      mode: Mode.MODIFY,
+      difficulty: Difficulty.INTERMEDIATE,
+      description: "A working xrpl.js escrow builder compiles cleanly but breaks the deal's legal terms. Find and fix the compliance bug in the code. Your code is executed and graded on the XRPL transaction it produces.",
+      scenario: `A fintech is settling a cross-border trade with XRPL native escrow. The buyer locks XRP; the seller is paid once delivery is confirmed.\n\nThe signed deal terms require:\n- The seller may be paid ONLY AFTER a 48-hour dispute window (the buyer can contest delivery in that time).\n- If the seller never delivers, the buyer MUST be refundable after 30 days.\n\nA developer has written an EscrowCreate builder in xrpl.js. It compiles, it produces a syntactically valid transaction, and it would pass a normal code review. But a compliance reviewer should reject it.\n\nYour job: find what is legally wrong and fix the code so the escrow actually enforces the deal terms. Edit the buildEscrow function. The platform runs your code and inspects the XRPL transaction it builds (and, when live grading is on, submits it to XRPL Testnet to confirm the ledger accepts the valid path and rejects a premature release).`,
+      publicRequirements: {
+        function: "buildEscrow({ destination, amountXrp, now }) -> EscrowCreate transaction",
+        legalTerms: [
+          "Release only permitted after a 48-hour dispute window",
+          "Buyer refundable if the seller fails to deliver within 30 days",
+        ],
+        helpers: { now: "current time in Ripple-epoch seconds", "drops(xrp)": "converts XRP to drops" },
+        note: "Your code is executed in a sandbox; it must return a transaction object.",
+      },
+      starterMaterialType: "xrpl-js",
+      starterMaterial: `// Cross-border conditional payment using XRPL native escrow.
+//
+// LEGAL TERMS (from the signed deal):
+//   1. The seller may be paid ONLY AFTER a 48-hour dispute window.
+//   2. If the seller never delivers, the buyer must be refundable after 30 days.
+//
+// Helpers available to you:
+//   now          current time in Ripple-epoch seconds
+//   drops(xrp)   converts XRP to drops (string)
+//
+// This compiles and returns a valid EscrowCreate - but compliance should
+// reject it. Fix buildEscrow so it enforces BOTH legal terms.
+function buildEscrow({ destination, amountXrp, now }) {
+  return {
+    TransactionType: "EscrowCreate",
+    Amount: drops(amountXrp),
+    Destination: destination,
+    // TODO: encode the 48-hour dispute window and the 30-day refund path.
+  }
+}`,
+      expectedSolution: {
+        kind: "xrpl-escrow",
+        entry: "buildEscrow",
+        input: { destination: "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", amountXrp: 100 },
+        expect: { finishAfterSeconds: 172800, cancelAfterSeconds: 2592000, toleranceSeconds: 600 },
+      },
+      visibleTests: [
+        { id: "vt1", description: "EscrowCreate is well-formed and accepted by the ledger", type: "execution", check: "createWellFormed", weight: 20, isVisible: true },
+        { id: "vt2", description: "48-hour dispute window is encoded (FinishAfter)", type: "execution", check: "disputeWindow", weight: 20, isVisible: true },
+        { id: "vt3", description: "30-day expiry refund path is enabled (CancelAfter)", type: "execution", check: "expiryRefund", weight: 15, isVisible: true },
+      ],
+      hiddenTests: [
+        { id: "ht1", description: "A premature release is rejected by the protocol", type: "execution", check: "prematureFinishRejected", weight: 25, isVisible: false },
+        { id: "ht2", description: "Refund window opens strictly after the dispute window", type: "execution", check: "windowOrdering", weight: 10, isVisible: false },
+        { id: "ht3", description: "Payment amount and destination are preserved", type: "execution", check: "valuePreserved", weight: 10, isVisible: false },
+      ],
+      scoringRubric: { totalWeight: 100, passMark: 70 },
+      modelAnswer: `function buildEscrow({ destination, amountXrp, now }) {
+  const HOUR = 3600
+  const DAY = 24 * HOUR
+  return {
+    TransactionType: "EscrowCreate",
+    Amount: drops(amountXrp),
+    Destination: destination,
+    // Release only permitted after the 48-hour dispute window closes:
+    FinishAfter: now + 48 * HOUR,
+    // Buyer refundable if the seller has not delivered within 30 days:
+    CancelAfter: now + 30 * DAY,
+  }
+}`,
+      explanation: "The original code omits FinishAfter and CancelAfter. Without FinishAfter, an EscrowFinish can release funds immediately - there is no dispute window, so the buyer's contractual right to contest delivery is unenforceable. Without CancelAfter, a non-delivering seller leaves the buyer's funds locked forever with no refund path. A developer sees valid code; a legal engineer sees that the protocol is not encoding the deal's obligations. The fix adds both time bounds (with CancelAfter strictly after FinishAfter, which the ledger also requires).",
+      tags: ["XRPL", "escrow", "EscrowCreate", "code", "compliance", "executable"],
+      isXrplRelated: true,
+      requiresXrplTestnet: true,
+      estimatedMinutes: 25,
+      maxScore: 100,
+    },
   ]
 
   for (const ch of challenges) {
