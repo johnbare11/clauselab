@@ -111,8 +111,28 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
     return lines.slice(0, keep).join("\n").trim()
   }
 
+  // Executable challenges are graded by running the candidate's code, so a
+  // truncated draft would be a syntax error rather than a partial pass.
+  // Instead we keep the model answer but drop the refund path (CancelAfter),
+  // leaving valid code that fixes the dispute window yet still fails the
+  // refund/ordering tests - a realistic in-progress submission.
+  const buildExecutablePartial = (model: string): string => {
+    const stripped = model
+      .split("\n")
+      .filter((l) => !/CancelAfter|refundable|within 30 days/i.test(l))
+      .join("\n")
+    // If nothing changed (model didn't match), fall back to the starter so the
+    // editor still holds runnable code rather than a broken truncation.
+    return stripped.trim() === model.trim()
+      ? (challenge.starterMaterial || model)
+      : stripped
+  }
+
   const loadPartialDraft = () => {
-    setAnswer(buildPartialDraft(challenge.modelAnswer || ""))
+    const draft = challenge.isExecutable
+      ? buildExecutablePartial(challenge.modelAnswer || "")
+      : buildPartialDraft(challenge.modelAnswer || "")
+    setAnswer(draft)
     setResult(null)
     setVisibleRunResults(null)
     setActiveTab("problem")
