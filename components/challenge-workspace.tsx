@@ -180,10 +180,15 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
       })
       const data = await res.json()
 
-      const detailRes = await fetch(`/api/submissions/${data.submissionId}`)
-      const detailData = await detailRes.json()
-
-      setResult({ ...data, feedback: detailData.feedback })
+      // Guest demo runs return the graded feedback inline (the detail endpoint is
+      // auth-gated); signed-in runs fetch the persisted submission detail.
+      if (data.feedback) {
+        setResult({ ...data, feedback: data.feedback })
+      } else {
+        const detailRes = await fetch(`/api/submissions/${data.submissionId}`)
+        const detailData = await detailRes.json()
+        setResult({ ...data, feedback: detailData.feedback })
+      }
       setActiveTab("results")
     } catch (e) {
       console.error(e)
@@ -288,6 +293,15 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
             <span className="text-xs text-gray-600">{challenge.estimatedMinutes} min estimated</span>
           </div>
           <div className="flex items-center gap-2">
+            {challenge.isExecutable && submitting && (
+              <span className="flex items-center gap-1.5 text-[11px] text-blue-300/90">
+                <span className="inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                Submitting to XRPL Testnet · usually ~10s
+              </span>
+            )}
+            {challenge.isExecutable && !submitting && (
+              <span className="text-[11px] text-gray-600">Live ledger grading · takes ~10s</span>
+            )}
             <button onClick={runVisibleTests}
               className="text-xs border border-[#2a2a2a] hover:border-[#3a3a3a] text-gray-300 px-3 py-1 rounded transition-colors">
               {challenge.isExecutable ? "Run code" : "Run visible tests"}
@@ -295,7 +309,7 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
             <button onClick={submit} disabled={submitting || !answer.trim()}
               title={challenge.isExecutable ? "Runs your code and grades the XRPL transaction it produces" : undefined}
               className="text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-1 rounded transition-colors font-medium">
-              {submitting ? (challenge.isExecutable ? "Executing..." : "Submitting...") : "Submit"}
+              {submitting ? (challenge.isExecutable ? "Executing on Testnet…" : "Submitting...") : "Submit"}
             </button>
           </div>
         </div>

@@ -8,7 +8,6 @@ export const runtime = "nodejs"
 
 export async function POST(req: NextRequest) {
   const { userId } = await auth()
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
   const { challengeId, answerText, answerJson, timeTakenSeconds } = body
@@ -17,11 +16,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 })
   }
 
-  const user = await db.user.findUnique({ where: { clerkId: userId } })
-  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 })
-
   const challenge = await db.challenge.findUnique({ where: { id: challengeId } })
   if (!challenge) return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
+
+  const isExecutable = isExecutionSpec(challenge.expectedSolution)
+
+  // Guest grading: assessors reviewing the demo can run the flagship executable
+  // challenge and see the full score + live Testnet artifacts without an account.
+  // It is scoped to executable challenges only (limiting faucet exposure) and is
+  // never persisted - anonymous runs don't write submissions or track progress.
+  if (!userId && !isExecutable) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
 
   const allTests = [
     ...(challenge.visibleTests as unknown as TestCase[]).map((t: TestCase) => ({ ...t, isVisible: true })),
@@ -38,6 +44,30 @@ export async function POST(req: NextRequest) {
   const result = grade
   const live = "live" in grade ? grade.live : undefined
 
+  const feedback = {
+    results: result.results,
+    missedRequirements: result.missedRequirements,
+    improvementSuggestions: result.improvementSuggestions,
+    modelAnswer: challenge.modelAnswer,
+    explanation: challenge.explanation,
+    live: live || null,
+  }
+
+  // Anonymous demo run: return the graded result inline (the detail endpoint is
+  // auth-gated) and skip all persistence.
+  if (!userId) {
+    return NextResponse.json({
+      submissionId: null,
+      guest: true,
+      score: result.score,
+      maxScore: result.maxScore,
+      feedback: JSON.parse(JSON.stringify(feedback)),
+    })
+  }
+
+  const user = await db.user.findUnique({ where: { clerkId: userId } })
+  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 })
+
   const submission = await db.submission.create({
     data: {
       userId: user.id,
@@ -50,14 +80,7 @@ export async function POST(req: NextRequest) {
       visibleTestsTotal: result.visibleTotal,
       hiddenTestsPassed: result.hiddenPassed,
       hiddenTestsTotal: result.hiddenTotal,
-      feedbackJson: JSON.parse(JSON.stringify({
-        results: result.results,
-        missedRequirements: result.missedRequirements,
-        improvementSuggestions: result.improvementSuggestions,
-        modelAnswer: challenge.modelAnswer,
-        explanation: challenge.explanation,
-        live: live || null,
-      })),
+      feedbackJson: JSON.parse(JSON.stringify(feedback)),
       timeTakenSeconds: timeTakenSeconds || null,
     },
   })

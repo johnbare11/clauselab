@@ -10,6 +10,10 @@ const isPublicRoute = createRouteMatcher([
   "/api/challenges(.*)",
   "/api/progress(.*)",
   "/api/submissions/preview(.*)",
+  // Exact path only (not /api/submissions/:id): lets anonymous assessors run the
+  // executable demo challenge. The handler rejects anonymous requests to
+  // non-executable challenges and never persists guest runs.
+  "/api/submissions",
   "/api/xrpl(.*)",
 ])
 
