@@ -41,7 +41,7 @@ async function fundWallet(): Promise<Wallet | null> {
   }
 }
 
-async function signAndSubmit(wallet: Wallet, tx: Record<string, unknown>): Promise<{ result?: string; hash?: string }> {
+async function signAndSubmit(wallet: Wallet, tx: Record<string, unknown>): Promise<{ result?: string; hash?: string; sequence?: number }> {
   const info = await rpc("account_info", { account: wallet.classicAddress, ledger_index: "current" })
   const seq = (info?.account_data as Record<string, unknown> | undefined)?.Sequence
   if (typeof seq !== "number") return {}
@@ -61,11 +61,33 @@ async function signAndSubmit(wallet: Wallet, tx: Record<string, unknown>): Promi
     return {
       result: submitRes?.engine_result as string | undefined,
       hash: signed.hash,
+      sequence: seq,
     }
   } catch {
     return {}
   }
 }
+
+// `submit` only queues a transaction; it takes a few seconds for a ledger to
+// close and validate it. The EscrowFinish can only be evaluated once the
+// EscrowCreate has actually been applied, so we poll until the escrow object
+// exists on-ledger (bounded, then give up gracefully).
+async function waitForEscrow(account: string, maxTries = 8, delayMs = 1500): Promise<boolean> {
+  for (let i = 0; i < maxTries; i++) {
+    const res = await rpc("account_objects", { account, type: "escrow", ledger_index: "validated" })
+    const objects = res?.account_objects as unknown[] | undefined
+    if (Array.isArray(objects) && objects.length > 0) return true
+    await new Promise((r) => setTimeout(r, delayMs))
+  }
+  return false
+}
+
+// The on-ledger run is a proof of execution, not a value transfer: a fresh
+// faucet wallet only holds a limited balance, so escrowing the candidate's full
+// amount (e.g. 100 XRP) fails to apply with tecUNFUNDED. The candidate's real
+// Amount is already validated structurally by the valuePreserved check, so for
+// the live submission we lock a small, always-affordable amount instead.
+const LIVE_ESCROW_DROPS = process.env.XRPL_LIVE_ESCROW_DROPS || "1000000" // 1 XRP
 
 // Submits the candidate's EscrowCreate, then attempts an immediate EscrowFinish
 // to prove the dispute window is enforced by the protocol.
@@ -74,21 +96,24 @@ export async function runEscrowLive(createTx: Record<string, unknown>, _expect: 
   const wallet = await fundWallet()
   if (!wallet) return { ...base, note: "Testnet faucet was unavailable; graded on executed transaction structure." }
 
-  const create = await signAndSubmit(wallet, { ...createTx, Account: wallet.classicAddress })
+  const create = await signAndSubmit(wallet, { ...createTx, Amount: LIVE_ESCROW_DROPS, Account: wallet.classicAddress })
   if (!create.result) return { ...base, note: "Testnet submission was unavailable; graded on executed transaction structure." }
 
-  // OfferSequence for the finish is the create's account Sequence.
-  const info = await rpc("account_info", { account: wallet.classicAddress, ledger_index: "current" })
-  const seqAfter = (info?.account_data as Record<string, unknown> | undefined)?.Sequence
-  const offerSequence = typeof seqAfter === "number" ? seqAfter - 1 : undefined
-
+  // The EscrowFinish references the create by its OfferSequence, which is the
+  // Sequence the EscrowCreate was submitted with. We only attempt the finish
+  // once the create has validated and the escrow object exists on-ledger -
+  // otherwise the finish would fail for the wrong reason (no target yet) rather
+  // than the one that matters: the dispute window blocking an early release.
   let finish: { result?: string; hash?: string } = {}
-  if (offerSequence !== undefined && create.result.startsWith("tes")) {
-    finish = await signAndSubmit(wallet, {
-      TransactionType: "EscrowFinish",
-      Owner: wallet.classicAddress,
-      OfferSequence: offerSequence,
-    })
+  if (create.result.startsWith("tes") && create.sequence !== undefined) {
+    const validated = await waitForEscrow(wallet.classicAddress)
+    if (validated) {
+      finish = await signAndSubmit(wallet, {
+        TransactionType: "EscrowFinish",
+        Owner: wallet.classicAddress,
+        OfferSequence: create.sequence,
+      })
+    }
   }
 
   return {
