@@ -25,6 +25,14 @@ export default async function ChallengesPage({ searchParams }: Props) {
     orderBy: [{ isXrplRelated: "desc" }, { difficulty: "asc" }, { createdAt: "asc" }],
   })
 
+  // The flagship executable challenge is the headline of the demo - pin it to the
+  // top so reviewers land on it first instead of hunting through the list.
+  const FLAGSHIP_SLUG = "fix-xrpl-escrow-compliance-bug"
+  const orderedChallenges = [
+    ...challenges.filter((c) => c.slug === FLAGSHIP_SLUG),
+    ...challenges.filter((c) => c.slug !== FLAGSHIP_SLUG),
+  ]
+
   const xrplTracks = tracks.filter((t) => t.slug.startsWith("xrpl-"))
   const generalTracks = tracks.filter((t) => !t.slug.startsWith("xrpl-"))
   const difficulties = ["BEGINNER", "INTERMEDIATE", "ADVANCED", "EXPERT"]
@@ -114,12 +122,16 @@ export default async function ChallengesPage({ searchParams }: Props) {
               {challenges.length === 0 && (
                 <div className="px-4 py-8 text-center text-gray-500 text-sm">No challenges found for this filter.</div>
               )}
-              {challenges.map((ch, i) => (
+              {orderedChallenges.map((ch, i) => {
+                const isFlagship = ch.slug === FLAGSHIP_SLUG
+                return (
                 <Link key={ch.id} href={`/challenges/${ch.slug}`}
-                  className={`grid grid-cols-[1fr_80px_90px_80px_60px] items-center px-4 py-3 hover:bg-[#141414] transition-colors border-b border-[#1a1a1a] last:border-0 group ${i % 2 === 0 ? "" : "bg-[#0d0d0d]"}`}>
+                  className={`grid grid-cols-[1fr_80px_90px_80px_60px] items-center px-4 py-3 transition-colors border-b border-[#1a1a1a] last:border-0 group ${isFlagship ? "bg-blue-950/30 hover:bg-blue-950/50 border-l-2 border-l-blue-500" : `hover:bg-[#141414] ${i % 2 === 0 ? "" : "bg-[#0d0d0d]"}`}`}>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {isFlagship && <span className="text-[10px] bg-blue-500 text-white px-1.5 py-0.5 rounded font-mono uppercase tracking-wide">★ Start here</span>}
                       <span className="text-white text-sm group-hover:text-blue-300 transition-colors font-medium">{ch.title}</span>
+                      {isFlagship && <span className="text-[10px] bg-blue-900/40 text-blue-300 border border-blue-700/50 px-1.5 py-0.5 rounded font-mono">Executable · no login</span>}
                       {ch.isXrplRelated && <span className="text-[10px] bg-blue-900/40 text-blue-400 border border-blue-800/50 px-1.5 py-0.5 rounded font-mono">XRPL</span>}
                       {ch.requiresXrplTestnet && <span className="text-[10px] bg-green-900/40 text-green-400 border border-green-800/50 px-1.5 py-0.5 rounded font-mono">Testnet</span>}
                     </div>
@@ -130,7 +142,8 @@ export default async function ChallengesPage({ searchParams }: Props) {
                   <span className="text-gray-500 text-xs truncate">{ch.track.name}</span>
                   <span className="text-gray-500 text-xs font-mono">{ch.maxScore}pts</span>
                 </Link>
-              ))}
+                )
+              })}
             </div>
           </main>
         </div>

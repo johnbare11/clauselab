@@ -82,39 +82,41 @@ export default function LandingPage() {
 
       <section className="border-b border-[#1e1e1e] py-12 px-4 bg-[#0a0a0a]">
         <div className="max-w-5xl mx-auto">
-          <div className="text-xs text-gray-500 uppercase tracking-widest mb-4">Example challenge</div>
-          <div className="border border-[#1e1e1e] rounded overflow-hidden">
-            <div className="border-b border-[#1e1e1e] px-4 py-3 flex items-center justify-between bg-[#0d0d0d]">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div className="text-xs text-gray-500 uppercase tracking-widest">Example challenge · graded by running your code on XRPL Testnet</div>
+            <Link href="/challenges/fix-xrpl-escrow-compliance-bug" className="text-xs text-blue-300 hover:text-blue-200 border border-blue-800/60 hover:border-blue-600 bg-blue-950/30 px-3 py-1 rounded transition-colors">No login needed · try the live challenge →</Link>
+          </div>
+          <div className="border border-blue-900/50 rounded overflow-hidden">
+            <div className="border-b border-[#1e1e1e] px-4 py-3 flex items-center justify-between bg-[#0a0f1a]">
               <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-white font-medium text-sm">Build XRPL Escrow Release Logic</span>
-                <Badge variant="blue">Build</Badge>
-                <Badge variant="green">Beginner</Badge>
+                <span className="text-white font-medium text-sm">Fix the Escrow That Passes Code Review but Fails Compliance</span>
+                <Badge variant="blue">Executable</Badge>
+                <Badge variant="green">Intermediate</Badge>
                 <Badge variant="gray">XRPL Escrow</Badge>
               </div>
-              <Link href="/sign-up" className="text-xs text-blue-400 hover:text-blue-300 shrink-0">Try it →</Link>
+              <Link href="/challenges/fix-xrpl-escrow-compliance-bug" className="text-xs text-blue-400 hover:text-blue-300 shrink-0">Try it →</Link>
             </div>
             <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-[#1e1e1e]">
               <div className="p-4">
                 <div className="text-xs text-gray-500 uppercase tracking-widest mb-3">Scenario</div>
-                <p className="text-gray-300 text-sm leading-relaxed">A fintech company wants to use XRPL native escrow for conditional payment release. Design the complete workflow: EscrowCreate, 48-hour dispute window, EscrowFinish on approval, and EscrowCancel on 30-day expiry.</p>
+                <p className="text-gray-300 text-sm leading-relaxed">A cross-border trade settles with XRPL native escrow. A developer&apos;s <span className="font-mono text-gray-200">xrpl.js</span> EscrowCreate builder compiles and passes code review — but it breaks the signed deal terms: funds release with no 48-hour dispute window, and the buyer has no 30-day refund path. Edit <span className="font-mono text-gray-200">buildEscrow</span> to fix the compliance bug. Your code is executed and graded on the XRPL transaction it produces.</p>
               </div>
               <div className="p-4">
                 <div className="text-xs text-gray-500 uppercase tracking-widest mb-3">Test Cases</div>
                 <div className="mb-3">
                   <div className="text-xs text-gray-500 mb-1.5">Visible</div>
                   <div className="text-xs text-emerald-400 font-mono space-y-1">
-                    <div>✓ EscrowCreate used to lock funds</div>
-                    <div>✓ EscrowFinish used for successful release</div>
-                    <div>✓ 48-hour dispute window specified</div>
+                    <div>✓ EscrowCreate well-formed and accepted by the ledger</div>
+                    <div>✓ 48-hour dispute window encoded (FinishAfter)</div>
+                    <div>✓ 30-day expiry refund path enabled (CancelAfter)</div>
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-gray-500 mb-1.5">Hidden (revealed after submission)</div>
                   <div className="text-xs text-gray-600 font-mono space-y-1">
-                    <div>▪ EscrowCancel handles 30-day expiry</div>
-                    <div>▪ Off-chain delivery connects to on-chain release</div>
-                    <div>▪ Dispute path prevents auto EscrowFinish</div>
-                    <div>▪ + 2 more edge cases</div>
+                    <div>▪ A premature release is rejected by the protocol</div>
+                    <div>▪ Refund window opens strictly after the dispute window</div>
+                    <div>▪ Payment amount and destination are preserved</div>
                   </div>
                 </div>
               </div>
