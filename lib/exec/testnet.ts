@@ -69,14 +69,15 @@ async function signAndSubmit(wallet: Wallet, tx: Record<string, unknown>): Promi
 }
 
 // `submit` only queues a transaction; it takes a few seconds for a ledger to
-// close and validate it. The EscrowFinish can only be evaluated once the
-// EscrowCreate has actually been applied, so we poll until the escrow object
-// exists on-ledger (bounded, then give up gracefully).
-async function waitForEscrow(account: string, maxTries = 8, delayMs = 1500): Promise<boolean> {
+// close and validate it. We poll the `tx` command until the transaction is
+// validated - this is exactly the state the public explorer needs, so once it
+// returns true the EscrowCreate has been applied (its escrow object exists, so
+// the EscrowFinish can be evaluated) and the explorer link will resolve.
+async function waitForValidation(hash: string | undefined, maxTries = 10, delayMs = 1500): Promise<boolean> {
+  if (!hash) return false
   for (let i = 0; i < maxTries; i++) {
-    const res = await rpc("account_objects", { account, type: "escrow", ledger_index: "validated" })
-    const objects = res?.account_objects as unknown[] | undefined
-    if (Array.isArray(objects) && objects.length > 0) return true
+    const res = await rpc("tx", { transaction: hash })
+    if (res?.validated === true) return true
     await new Promise((r) => setTimeout(r, delayMs))
   }
   return false
@@ -105,9 +106,10 @@ export async function runEscrowLive(createTx: Record<string, unknown>, _expect: 
   // otherwise the finish would fail for the wrong reason (no target yet) rather
   // than the one that matters: the dispute window blocking an early release.
   let finish: { result?: string; hash?: string } = {}
+  let createValidated = false
   if (create.result.startsWith("tes") && create.sequence !== undefined) {
-    const validated = await waitForEscrow(wallet.classicAddress)
-    if (validated) {
+    createValidated = await waitForValidation(create.hash)
+    if (createValidated) {
       finish = await signAndSubmit(wallet, {
         TransactionType: "EscrowFinish",
         Owner: wallet.classicAddress,
@@ -121,8 +123,11 @@ export async function runEscrowLive(createTx: Record<string, unknown>, _expect: 
     available: true,
     createHash: create.hash,
     createResult: create.result,
+    createValidated,
     finishHash: finish.hash,
     finishResult: finish.result,
-    explorer: create.hash ? EXPLORER + create.hash : undefined,
+    // Only link to the explorer once the create is validated on-ledger - an
+    // unvalidated hash shows "Something bad happened" on the explorer.
+    explorer: createValidated && create.hash ? EXPLORER + create.hash : undefined,
   }
 }

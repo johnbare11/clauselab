@@ -43,6 +43,7 @@ interface LiveArtifacts {
   available: boolean
   createHash?: string
   createResult?: string
+  createValidated?: boolean
   finishHash?: string
   finishResult?: string
   explorer?: string
@@ -433,10 +434,12 @@ function ResultsPanel({ result, maxScore, isExecutable }: { result: SubmissionRe
                   </span>
                 </div>
               )}
-              {live.explorer && (
+              {live.explorer ? (
                 <a href={live.explorer} target="_blank" rel="noopener noreferrer" className="inline-block text-blue-400 hover:text-blue-300 mt-1 break-all">
-                  View on Testnet explorer →
+                  View validated transaction on Testnet explorer →
                 </a>
+              ) : live.createResult?.startsWith("tes") && (
+                <span className="inline-block text-gray-600 mt-1">Submitted to the ledger; awaiting validation before it appears on the explorer.</span>
               )}
             </div>
           ) : (

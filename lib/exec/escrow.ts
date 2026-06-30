@@ -20,6 +20,7 @@ export interface LiveArtifacts {
   available: boolean
   createHash?: string
   createResult?: string
+  createValidated?: boolean
   finishHash?: string
   finishResult?: string
   explorer?: string
