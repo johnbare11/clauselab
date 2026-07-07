@@ -396,6 +396,47 @@ function ResultsPanel({ result, maxScore, isExecutable }: { result: SubmissionRe
   const visible = allResults.filter(r => r.isVisible)
   const live = result.feedback?.live
 
+  // After a live submission the EscrowCreate may be applied but not yet visible
+  // on the public explorer (its indexer lags a few seconds). Rather than show a
+  // link that 404s, we poll the ledger and reveal the link the moment it is
+  // validated - keeping a clear "link appearing shortly" state until then.
+  const createHash = live?.createHash
+  const createOk = !!createHash && !!live?.createResult?.startsWith("tes")
+  const [txValidated, setTxValidated] = useState<boolean>(!!live?.createValidated)
+  const [txLedgerIndex, setTxLedgerIndex] = useState<number | undefined>(live?.createLedgerIndex)
+  // linkReady drives whether we render a clickable explorer link. It becomes
+  // true when the tx is confirmed validated, or as a fallback once polling has
+  // run its course (by then the tx has almost certainly been indexed even if our
+  // cluster lookups kept missing it), so a link is always eventually shown.
+  const [linkReady, setLinkReady] = useState<boolean>(!!live?.createValidated)
+
+  useEffect(() => {
+    if (!createOk || linkReady) return
+    let cancelled = false
+    let tries = 0
+    const poll = async () => {
+      tries++
+      try {
+        const r = await fetch(`/api/xrpl/tx-status?hash=${createHash}`)
+        const d = await r.json()
+        if (!cancelled && d.validated) {
+          setTxValidated(true)
+          setTxLedgerIndex(d.ledgerIndex)
+          setLinkReady(true)
+          return
+        }
+      } catch { /* keep polling */ }
+      if (!cancelled && tries < 24) setTimeout(poll, 2500)
+      else if (!cancelled) setLinkReady(true) // fallback: reveal link after ~60s
+    }
+    poll()
+    return () => { cancelled = true }
+  }, [createOk, createHash, linkReady])
+
+  const explorerUrl = live?.explorer || (createHash ? `https://testnet.xrpl.org/transactions/${createHash}` : undefined)
+  const showExplorerLink = !!explorerUrl && linkReady
+  const explorerBusy = createOk && !linkReady
+
   return (
     <div className="space-y-4">
       <div className="border border-[#1e1e1e] rounded p-4 bg-[#0a0a0a]">
@@ -435,12 +476,10 @@ function ResultsPanel({ result, maxScore, isExecutable }: { result: SubmissionRe
                   </span>
                 </div>
               )}
-              {/* Self-contained on-ledger confirmation: fetched server-side, so
-                  it never depends on the external explorer being reachable. */}
-              {live.createValidated && (
+              {(txValidated || live.createValidated) && (
                 <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#1a1a1a] mt-1">
                   <span className="text-gray-500">Validated on ledger</span>
-                  <span className="text-emerald-400">✓{live.createLedgerIndex ? ` #${live.createLedgerIndex}` : ""}</span>
+                  <span className="text-emerald-400">✓{(txLedgerIndex || live.createLedgerIndex) ? ` #${txLedgerIndex || live.createLedgerIndex}` : ""}</span>
                 </div>
               )}
               {live.createHash && (
@@ -449,13 +488,18 @@ function ResultsPanel({ result, maxScore, isExecutable }: { result: SubmissionRe
                   <span className="text-gray-400 break-all">{live.createHash.slice(0, 10)}…{live.createHash.slice(-6)}</span>
                 </div>
               )}
-              {live.explorer ? (
-                <a href={live.explorer} target="_blank" rel="noopener noreferrer" className="inline-block text-blue-400 hover:text-blue-300 mt-1 break-all">
-                  Verify on Testnet explorer →
+              {showExplorerLink ? (
+                <a href={explorerUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-blue-400 hover:text-blue-300 mt-1.5 break-all font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  View this transaction on the XRPL Testnet explorer →
                 </a>
-              ) : live.createResult?.startsWith("tes") && (
-                <span className="block text-gray-600 mt-1">Confirmed on-ledger above. External explorer indexing can lag a few seconds.</span>
-              )}
+              ) : explorerBusy ? (
+                <div className="flex items-center gap-2 mt-1.5 text-amber-300/90">
+                  <span className="w-2.5 h-2.5 rounded-full border-2 border-amber-400/40 border-t-amber-400 animate-spin" />
+                  <span>Confirming on XRPL Testnet — explorer link will appear here in a few seconds…</span>
+                </div>
+              ) : null}
             </div>
           ) : (
             <p className="text-xs text-gray-600">

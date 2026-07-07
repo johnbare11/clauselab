@@ -80,7 +80,7 @@ async function signAndSubmit(wallet: Wallet, tx: Record<string, unknown>): Promi
 // briefly miss a freshly-validated transaction, so `applied` (via the escrow
 // object) is the more reliable signal for gating the finish.
 interface ConfirmState { applied: boolean; validated: boolean; ledgerIndex?: number }
-async function confirmCreate(account: string, hash: string | undefined, maxTries = 12, delayMs = 1500): Promise<ConfirmState> {
+async function confirmCreate(account: string, hash: string | undefined, maxTries = 8, delayMs = 1500): Promise<ConfirmState> {
   const state: ConfirmState = { applied: false, validated: false }
   for (let i = 0; i < maxTries; i++) {
     if (hash) {
@@ -94,10 +94,26 @@ async function confirmCreate(account: string, hash: string | undefined, maxTries
     }
     const objs = await rpc("account_objects", { account, type: "escrow", ledger_index: "validated" })
     const list = objs?.account_objects as unknown[] | undefined
-    if (Array.isArray(list) && list.length > 0) state.applied = true
+    // Return as soon as the escrow is on-ledger so the EscrowFinish can run and
+    // the result comes back quickly. The client then polls txStatus to reveal
+    // the explorer link the instant the tx is queryable (see /api/xrpl/tx-status).
+    if (Array.isArray(list) && list.length > 0) {
+      state.applied = true
+      return state
+    }
     await new Promise((r) => setTimeout(r, delayMs))
   }
   return state
+}
+
+// Public status check the client polls after a submission to know when the
+// EscrowCreate is validated and therefore visible on the Testnet explorer.
+export async function txStatus(hash: string): Promise<{ validated: boolean; ledgerIndex?: number }> {
+  const tx = await rpc("tx", { transaction: hash })
+  if (tx?.validated === true) {
+    return { validated: true, ledgerIndex: typeof tx.ledger_index === "number" ? tx.ledger_index : undefined }
+  }
+  return { validated: false }
 }
 
 // The on-ledger run is a proof of execution, not a value transfer: a fresh
@@ -145,10 +161,10 @@ export async function runEscrowLive(createTx: Record<string, unknown>, _expect: 
     createLedgerIndex: confirm.ledgerIndex,
     finishHash: finish.hash,
     finishResult: finish.result,
-    // Only link to the explorer once the tx query itself reports validated -
-    // that is the exact data the explorer reads, so the link is guaranteed to
-    // resolve. If it never confirms in our window, we show no link (and rely on
-    // the in-app on-ledger confirmation) rather than a link that 404s.
-    explorer: confirm.validated && create.hash ? EXPLORER + create.hash : undefined,
+    // Always hand the client the explorer URL when the create was accepted. The
+    // client only reveals it as a clickable link once it has confirmed (via
+    // txStatus polling) that the tx is validated and therefore explorer-ready,
+    // showing a "link appearing shortly" state until then.
+    explorer: createOk && create.hash ? EXPLORER + create.hash : undefined,
   }
 }
