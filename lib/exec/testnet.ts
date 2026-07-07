@@ -69,23 +69,35 @@ async function signAndSubmit(wallet: Wallet, tx: Record<string, unknown>): Promi
 }
 
 // `submit` only queues a transaction; it takes a few seconds for a ledger to
-// close and validate it. We confirm the EscrowCreate has been applied before
-// attempting the EscrowFinish. The public Testnet endpoint is a load-balanced
-// cluster where a `tx` lookup can miss a freshly-validated transaction, so we
-// accept either signal: the tx reporting validated, OR the escrow object
-// existing on the account. Either one means the create is on-ledger.
-async function waitForValidation(account: string, hash: string | undefined, maxTries = 10, delayMs = 1500): Promise<boolean> {
+// close and validate it. We track two distinct states:
+//   applied   - the create is on-ledger (its escrow object exists), so the
+//               EscrowFinish can be meaningfully evaluated.
+//   validated - the `tx` query itself reports validated. This is the exact
+//               data source the public explorer reads, so we only ever build an
+//               explorer link once this is true - otherwise the link 404s with
+//               "Something bad happened" for anyone who clicks immediately.
+// The public Testnet endpoint is a load-balanced cluster where a `tx` lookup can
+// briefly miss a freshly-validated transaction, so `applied` (via the escrow
+// object) is the more reliable signal for gating the finish.
+interface ConfirmState { applied: boolean; validated: boolean; ledgerIndex?: number }
+async function confirmCreate(account: string, hash: string | undefined, maxTries = 12, delayMs = 1500): Promise<ConfirmState> {
+  const state: ConfirmState = { applied: false, validated: false }
   for (let i = 0; i < maxTries; i++) {
     if (hash) {
       const tx = await rpc("tx", { transaction: hash })
-      if (tx?.validated === true) return true
+      if (tx?.validated === true) {
+        state.applied = true
+        state.validated = true
+        state.ledgerIndex = typeof tx.ledger_index === "number" ? tx.ledger_index : undefined
+        return state
+      }
     }
     const objs = await rpc("account_objects", { account, type: "escrow", ledger_index: "validated" })
     const list = objs?.account_objects as unknown[] | undefined
-    if (Array.isArray(list) && list.length > 0) return true
+    if (Array.isArray(list) && list.length > 0) state.applied = true
     await new Promise((r) => setTimeout(r, delayMs))
   }
-  return false
+  return state
 }
 
 // The on-ledger run is a proof of execution, not a value transfer: a fresh
@@ -112,10 +124,10 @@ export async function runEscrowLive(createTx: Record<string, unknown>, _expect: 
   // than the one that matters: the dispute window blocking an early release.
   const createOk = create.result.startsWith("tes")
   let finish: { result?: string; hash?: string } = {}
-  let createValidated = false
+  let confirm: ConfirmState = { applied: false, validated: false }
   if (createOk && create.sequence !== undefined) {
-    createValidated = await waitForValidation(wallet.classicAddress, create.hash)
-    if (createValidated) {
+    confirm = await confirmCreate(wallet.classicAddress, create.hash)
+    if (confirm.applied) {
       finish = await signAndSubmit(wallet, {
         TransactionType: "EscrowFinish",
         Owner: wallet.classicAddress,
@@ -129,13 +141,14 @@ export async function runEscrowLive(createTx: Record<string, unknown>, _expect: 
     available: true,
     createHash: create.hash,
     createResult: create.result,
-    createValidated,
+    createValidated: confirm.validated,
+    createLedgerIndex: confirm.ledgerIndex,
     finishHash: finish.hash,
     finishResult: finish.result,
-    // Link to the explorer whenever the create was accepted. We only get here
-    // after waiting for validation, so by the time the result is shown the
-    // transaction has almost always been applied; createValidated drives a
-    // "may take a few seconds" hint for the rare case it is still settling.
-    explorer: createOk && create.hash ? EXPLORER + create.hash : undefined,
+    // Only link to the explorer once the tx query itself reports validated -
+    // that is the exact data the explorer reads, so the link is guaranteed to
+    // resolve. If it never confirms in our window, we show no link (and rely on
+    // the in-app on-ledger confirmation) rather than a link that 404s.
+    explorer: confirm.validated && create.hash ? EXPLORER + create.hash : undefined,
   }
 }

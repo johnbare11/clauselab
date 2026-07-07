@@ -44,6 +44,7 @@ interface LiveArtifacts {
   createHash?: string
   createResult?: string
   createValidated?: boolean
+  createLedgerIndex?: number
   finishHash?: string
   finishResult?: string
   explorer?: string
@@ -434,15 +435,26 @@ function ResultsPanel({ result, maxScore, isExecutable }: { result: SubmissionRe
                   </span>
                 </div>
               )}
-              {live.explorer && (
-                <div className="mt-1">
-                  <a href={live.explorer} target="_blank" rel="noopener noreferrer" className="inline-block text-blue-400 hover:text-blue-300 break-all">
-                    View transaction on Testnet explorer →
-                  </a>
-                  {live.createValidated === false && (
-                    <span className="block text-gray-600">May take a few seconds to appear while the ledger validates.</span>
-                  )}
+              {/* Self-contained on-ledger confirmation: fetched server-side, so
+                  it never depends on the external explorer being reachable. */}
+              {live.createValidated && (
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#1a1a1a] mt-1">
+                  <span className="text-gray-500">Validated on ledger</span>
+                  <span className="text-emerald-400">✓{live.createLedgerIndex ? ` #${live.createLedgerIndex}` : ""}</span>
                 </div>
+              )}
+              {live.createHash && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-gray-500">Tx hash</span>
+                  <span className="text-gray-400 break-all">{live.createHash.slice(0, 10)}…{live.createHash.slice(-6)}</span>
+                </div>
+              )}
+              {live.explorer ? (
+                <a href={live.explorer} target="_blank" rel="noopener noreferrer" className="inline-block text-blue-400 hover:text-blue-300 mt-1 break-all">
+                  Verify on Testnet explorer →
+                </a>
+              ) : live.createResult?.startsWith("tes") && (
+                <span className="block text-gray-600 mt-1">Confirmed on-ledger above. External explorer indexing can lag a few seconds.</span>
               )}
             </div>
           ) : (

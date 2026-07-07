@@ -21,6 +21,7 @@ export interface LiveArtifacts {
   createHash?: string
   createResult?: string
   createValidated?: boolean
+  createLedgerIndex?: number
   finishHash?: string
   finishResult?: string
   explorer?: string
