@@ -69,15 +69,20 @@ async function signAndSubmit(wallet: Wallet, tx: Record<string, unknown>): Promi
 }
 
 // `submit` only queues a transaction; it takes a few seconds for a ledger to
-// close and validate it. We poll the `tx` command until the transaction is
-// validated - this is exactly the state the public explorer needs, so once it
-// returns true the EscrowCreate has been applied (its escrow object exists, so
-// the EscrowFinish can be evaluated) and the explorer link will resolve.
-async function waitForValidation(hash: string | undefined, maxTries = 10, delayMs = 1500): Promise<boolean> {
-  if (!hash) return false
+// close and validate it. We confirm the EscrowCreate has been applied before
+// attempting the EscrowFinish. The public Testnet endpoint is a load-balanced
+// cluster where a `tx` lookup can miss a freshly-validated transaction, so we
+// accept either signal: the tx reporting validated, OR the escrow object
+// existing on the account. Either one means the create is on-ledger.
+async function waitForValidation(account: string, hash: string | undefined, maxTries = 10, delayMs = 1500): Promise<boolean> {
   for (let i = 0; i < maxTries; i++) {
-    const res = await rpc("tx", { transaction: hash })
-    if (res?.validated === true) return true
+    if (hash) {
+      const tx = await rpc("tx", { transaction: hash })
+      if (tx?.validated === true) return true
+    }
+    const objs = await rpc("account_objects", { account, type: "escrow", ledger_index: "validated" })
+    const list = objs?.account_objects as unknown[] | undefined
+    if (Array.isArray(list) && list.length > 0) return true
     await new Promise((r) => setTimeout(r, delayMs))
   }
   return false
@@ -105,10 +110,11 @@ export async function runEscrowLive(createTx: Record<string, unknown>, _expect: 
   // once the create has validated and the escrow object exists on-ledger -
   // otherwise the finish would fail for the wrong reason (no target yet) rather
   // than the one that matters: the dispute window blocking an early release.
+  const createOk = create.result.startsWith("tes")
   let finish: { result?: string; hash?: string } = {}
   let createValidated = false
-  if (create.result.startsWith("tes") && create.sequence !== undefined) {
-    createValidated = await waitForValidation(create.hash)
+  if (createOk && create.sequence !== undefined) {
+    createValidated = await waitForValidation(wallet.classicAddress, create.hash)
     if (createValidated) {
       finish = await signAndSubmit(wallet, {
         TransactionType: "EscrowFinish",
@@ -126,8 +132,10 @@ export async function runEscrowLive(createTx: Record<string, unknown>, _expect: 
     createValidated,
     finishHash: finish.hash,
     finishResult: finish.result,
-    // Only link to the explorer once the create is validated on-ledger - an
-    // unvalidated hash shows "Something bad happened" on the explorer.
-    explorer: createValidated && create.hash ? EXPLORER + create.hash : undefined,
+    // Link to the explorer whenever the create was accepted. We only get here
+    // after waiting for validation, so by the time the result is shown the
+    // transaction has almost always been applied; createValidated drives a
+    // "may take a few seconds" hint for the rare case it is still settling.
+    explorer: createOk && create.hash ? EXPLORER + create.hash : undefined,
   }
 }

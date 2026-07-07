@@ -434,12 +434,15 @@ function ResultsPanel({ result, maxScore, isExecutable }: { result: SubmissionRe
                   </span>
                 </div>
               )}
-              {live.explorer ? (
-                <a href={live.explorer} target="_blank" rel="noopener noreferrer" className="inline-block text-blue-400 hover:text-blue-300 mt-1 break-all">
-                  View validated transaction on Testnet explorer →
-                </a>
-              ) : live.createResult?.startsWith("tes") && (
-                <span className="inline-block text-gray-600 mt-1">Submitted to the ledger; awaiting validation before it appears on the explorer.</span>
+              {live.explorer && (
+                <div className="mt-1">
+                  <a href={live.explorer} target="_blank" rel="noopener noreferrer" className="inline-block text-blue-400 hover:text-blue-300 break-all">
+                    View transaction on Testnet explorer →
+                  </a>
+                  {live.createValidated === false && (
+                    <span className="block text-gray-600">May take a few seconds to appear while the ledger validates.</span>
+                  )}
+                </div>
               )}
             </div>
           ) : (
