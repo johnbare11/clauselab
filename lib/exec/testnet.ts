@@ -44,19 +44,24 @@ async function fundWallet(): Promise<Wallet | null> {
   }
 }
 
-async function signAndSubmit(wallet: Wallet, tx: Record<string, unknown>): Promise<{ result?: string; hash?: string; sequence?: number }> {
+async function signAndSubmit(wallet: Wallet, tx: Record<string, unknown>): Promise<{ result?: string; hash?: string; sequence?: number; blob?: string }> {
   const info = await rpc("account_info", { account: wallet.classicAddress, ledger_index: "current" })
   const seq = (info?.account_data as Record<string, unknown> | undefined)?.Sequence
   if (typeof seq !== "number") return {}
   const current = await rpc("ledger_current", {})
   const ledgerIndex = (current?.ledger_current_index as number) || 0
 
+  // A generous fee (testnet XRP is free) cuts through fee escalation so the tx
+  // goes straight into the open ledger instead of sitting in the queue, and a
+  // wide LastLedgerSequence window (~4-5 min) keeps it retryable while we
+  // re-broadcast. A submit is only preliminary - validation is confirmed
+  // separately, re-broadcasting the same signed blob until it lands.
   const prepared = {
     ...tx,
     Account: wallet.classicAddress,
     Sequence: seq,
-    Fee: "12",
-    LastLedgerSequence: ledgerIndex + 20,
+    Fee: "1000",
+    ...(ledgerIndex > 0 ? { LastLedgerSequence: ledgerIndex + 75 } : {}),
   }
   try {
     const signed = wallet.sign(prepared as Parameters<Wallet["sign"]>[0])
@@ -65,6 +70,7 @@ async function signAndSubmit(wallet: Wallet, tx: Record<string, unknown>): Promi
       result: submitRes?.engine_result as string | undefined,
       hash: signed.hash,
       sequence: seq,
+      blob: signed.tx_blob,
     }
   } catch {
     return {}
@@ -105,10 +111,16 @@ export async function createStatus(hash: string | undefined, account: string | u
 }
 
 interface ConfirmState { validated: boolean; ledgerIndex?: number }
-async function confirmCreate(account: string, hash: string | undefined, maxTries = 8, delayMs = 1500): Promise<ConfirmState> {
+// Reliable submission: a single `submit` is only a broadcast attempt and can be
+// dropped by the cluster, after which the tx expires at LastLedgerSequence and
+// never validates. So while waiting for validation we re-broadcast the same
+// signed blob each round - idempotent (same hash), and it keeps the tx alive
+// until a ledger includes it.
+async function confirmCreate(account: string, hash: string | undefined, blob: string | undefined, maxTries = 15, delayMs = 2000): Promise<ConfirmState> {
   for (let i = 0; i < maxTries; i++) {
     const s = await createStatus(hash, account)
     if (s.validated) return s
+    if (blob && i > 0) await rpc("submit", { tx_blob: blob })
     await new Promise((r) => setTimeout(r, delayMs))
   }
   return { validated: false }
@@ -143,7 +155,7 @@ export async function runEscrowLive(createTx: Record<string, unknown>, _expect: 
     // Wait until the create is validated on-ledger before attempting the finish,
     // otherwise the finish fails for the wrong reason (no escrow yet) instead of
     // the one that matters: the dispute window blocking an early release.
-    confirm = await confirmCreate(wallet.classicAddress, create.hash)
+    confirm = await confirmCreate(wallet.classicAddress, create.hash, create.blob)
     if (confirm.validated) {
       finish = await signAndSubmit(wallet, {
         TransactionType: "EscrowFinish",
