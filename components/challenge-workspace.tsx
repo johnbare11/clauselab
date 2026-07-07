@@ -42,6 +42,7 @@ interface LiveArtifacts {
   attempted: boolean
   available: boolean
   createHash?: string
+  createAccount?: string
   createResult?: string
   createValidated?: boolean
   createLedgerIndex?: number
@@ -401,41 +402,42 @@ function ResultsPanel({ result, maxScore, isExecutable }: { result: SubmissionRe
   // link that 404s, we poll the ledger and reveal the link the moment it is
   // validated - keeping a clear "link appearing shortly" state until then.
   const createHash = live?.createHash
+  const createAccount = live?.createAccount
   const createOk = !!createHash && !!live?.createResult?.startsWith("tes")
+  // txValidated drives whether we render a clickable explorer link. We only ever
+  // reveal it once the create is genuinely validated on-ledger, so the link (and
+  // the explorer page it opens) is guaranteed to resolve rather than showing a
+  // pending / "not yet validated" transaction.
   const [txValidated, setTxValidated] = useState<boolean>(!!live?.createValidated)
   const [txLedgerIndex, setTxLedgerIndex] = useState<number | undefined>(live?.createLedgerIndex)
-  // linkReady drives whether we render a clickable explorer link. It becomes
-  // true when the tx is confirmed validated, or as a fallback once polling has
-  // run its course (by then the tx has almost certainly been indexed even if our
-  // cluster lookups kept missing it), so a link is always eventually shown.
-  const [linkReady, setLinkReady] = useState<boolean>(!!live?.createValidated)
 
   useEffect(() => {
-    if (!createOk || linkReady) return
+    if (!createOk || txValidated) return
     let cancelled = false
     let tries = 0
+    const params = new URLSearchParams()
+    if (createHash) params.set("hash", createHash)
+    if (createAccount) params.set("account", createAccount)
     const poll = async () => {
       tries++
       try {
-        const r = await fetch(`/api/xrpl/tx-status?hash=${createHash}`)
+        const r = await fetch(`/api/xrpl/tx-status?${params.toString()}`)
         const d = await r.json()
         if (!cancelled && d.validated) {
           setTxValidated(true)
           setTxLedgerIndex(d.ledgerIndex)
-          setLinkReady(true)
           return
         }
       } catch { /* keep polling */ }
-      if (!cancelled && tries < 24) setTimeout(poll, 2500)
-      else if (!cancelled) setLinkReady(true) // fallback: reveal link after ~60s
+      if (!cancelled && tries < 40) setTimeout(poll, 2500) // keep trying up to ~100s
     }
     poll()
     return () => { cancelled = true }
-  }, [createOk, createHash, linkReady])
+  }, [createOk, createHash, createAccount, txValidated])
 
   const explorerUrl = live?.explorer || (createHash ? `https://test.bithomp.com/explorer/${createHash}` : undefined)
-  const showExplorerLink = !!explorerUrl && linkReady
-  const explorerBusy = createOk && !linkReady
+  const showExplorerLink = !!explorerUrl && txValidated
+  const explorerBusy = createOk && !txValidated
 
   return (
     <div className="space-y-4">

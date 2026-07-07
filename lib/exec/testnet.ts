@@ -82,39 +82,34 @@ async function signAndSubmit(wallet: Wallet, tx: Record<string, unknown>): Promi
 // The public Testnet endpoint is a load-balanced cluster where a `tx` lookup can
 // briefly miss a freshly-validated transaction, so `applied` (via the escrow
 // object) is the more reliable signal for gating the finish.
-interface ConfirmState { applied: boolean; validated: boolean; ledgerIndex?: number }
-async function confirmCreate(account: string, hash: string | undefined, maxTries = 8, delayMs = 1500): Promise<ConfirmState> {
-  const state: ConfirmState = { applied: false, validated: false }
-  for (let i = 0; i < maxTries; i++) {
-    if (hash) {
-      const tx = await rpc("tx", { transaction: hash })
-      if (tx?.validated === true) {
-        state.applied = true
-        state.validated = true
-        state.ledgerIndex = typeof tx.ledger_index === "number" ? tx.ledger_index : undefined
-        return state
-      }
+// Is the EscrowCreate validated on-ledger? Two signals: the `tx` query reporting
+// validated (gives us the ledger index), or the escrow object existing on a
+// *validated* ledger (account_objects with ledger_index "validated" only returns
+// validated state). The escrow-object check is the reliable one - the public
+// endpoint is a load-balanced cluster where a `tx` lookup can briefly miss a
+// just-validated transaction, but if the escrow object is there, the create is
+// definitively validated. Either signal means the explorer will resolve it.
+export async function createStatus(hash: string | undefined, account: string | undefined): Promise<{ validated: boolean; ledgerIndex?: number }> {
+  if (hash) {
+    const tx = await rpc("tx", { transaction: hash })
+    if (tx?.validated === true) {
+      return { validated: true, ledgerIndex: typeof tx.ledger_index === "number" ? tx.ledger_index : undefined }
     }
+  }
+  if (account) {
     const objs = await rpc("account_objects", { account, type: "escrow", ledger_index: "validated" })
     const list = objs?.account_objects as unknown[] | undefined
-    // Return as soon as the escrow is on-ledger so the EscrowFinish can run and
-    // the result comes back quickly. The client then polls txStatus to reveal
-    // the explorer link the instant the tx is queryable (see /api/xrpl/tx-status).
-    if (Array.isArray(list) && list.length > 0) {
-      state.applied = true
-      return state
-    }
-    await new Promise((r) => setTimeout(r, delayMs))
+    if (Array.isArray(list) && list.length > 0) return { validated: true }
   }
-  return state
+  return { validated: false }
 }
 
-// Public status check the client polls after a submission to know when the
-// EscrowCreate is validated and therefore visible on the Testnet explorer.
-export async function txStatus(hash: string): Promise<{ validated: boolean; ledgerIndex?: number }> {
-  const tx = await rpc("tx", { transaction: hash })
-  if (tx?.validated === true) {
-    return { validated: true, ledgerIndex: typeof tx.ledger_index === "number" ? tx.ledger_index : undefined }
+interface ConfirmState { validated: boolean; ledgerIndex?: number }
+async function confirmCreate(account: string, hash: string | undefined, maxTries = 8, delayMs = 1500): Promise<ConfirmState> {
+  for (let i = 0; i < maxTries; i++) {
+    const s = await createStatus(hash, account)
+    if (s.validated) return s
+    await new Promise((r) => setTimeout(r, delayMs))
   }
   return { validated: false }
 }
@@ -143,10 +138,13 @@ export async function runEscrowLive(createTx: Record<string, unknown>, _expect: 
   // than the one that matters: the dispute window blocking an early release.
   const createOk = create.result.startsWith("tes")
   let finish: { result?: string; hash?: string } = {}
-  let confirm: ConfirmState = { applied: false, validated: false }
+  let confirm: ConfirmState = { validated: false }
   if (createOk && create.sequence !== undefined) {
+    // Wait until the create is validated on-ledger before attempting the finish,
+    // otherwise the finish fails for the wrong reason (no escrow yet) instead of
+    // the one that matters: the dispute window blocking an early release.
     confirm = await confirmCreate(wallet.classicAddress, create.hash)
-    if (confirm.applied) {
+    if (confirm.validated) {
       finish = await signAndSubmit(wallet, {
         TransactionType: "EscrowFinish",
         Owner: wallet.classicAddress,
@@ -159,6 +157,7 @@ export async function runEscrowLive(createTx: Record<string, unknown>, _expect: 
     attempted: true,
     available: true,
     createHash: create.hash,
+    createAccount: wallet.classicAddress,
     createResult: create.result,
     createValidated: confirm.validated,
     createLedgerIndex: confirm.ledgerIndex,

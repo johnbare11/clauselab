@@ -19,6 +19,7 @@ export interface LiveArtifacts {
   attempted: boolean
   available: boolean
   createHash?: string
+  createAccount?: string
   createResult?: string
   createValidated?: boolean
   createLedgerIndex?: number
