@@ -8,7 +8,15 @@ import type { EscrowExpect, LiveArtifacts } from "./escrow"
 // Every failure degrades to { available: false } so grading falls back to
 // structural checks - a faucet or network hiccup can never break a submission.
 
-const WSS = process.env.XRPL_TESTNET_WSS || "wss://s.altnet.rippletest.net:51233"
+// Candidate WebSocket endpoints, tried in order. xrpl-labs runs on 443, which
+// gets through egress rules that block non-standard ports like 51233.
+const WSS_ENDPOINTS = process.env.XRPL_TESTNET_WSS
+  ? [process.env.XRPL_TESTNET_WSS]
+  : [
+      "wss://s.altnet.rippletest.net:51233",
+      "wss://testnet.xrpl-labs.com",
+      "wss://clio.altnet.rippletest.net:51233",
+    ]
 const RPC = process.env.XRPL_TESTNET_RPC || "https://s.altnet.rippletest.net:51234"
 // Bithomp's testnet explorer indexes far faster and more reliably than Ripple's
 // own testnet.xrpl.org, which reads from a laggy backend and often 404s a
@@ -75,11 +83,21 @@ function metaResult(meta: unknown): string | undefined {
 // are validated into the ledger too, so submitAndWait resolves for them.
 export async function runEscrowLive(createTx: Record<string, unknown>, _expect: EscrowExpect): Promise<LiveArtifacts> {
   const base: LiveArtifacts = { attempted: true, available: false }
-  const client = new Client(WSS, { connectionTimeout: 10000 })
 
-  try {
-    await client.connect()
-  } catch {
+  let client: Client | null = null
+  for (const url of WSS_ENDPOINTS) {
+    const candidate = new Client(url, { connectionTimeout: 10000 })
+    try {
+      await candidate.connect()
+      client = candidate
+      break
+    } catch (e) {
+      // Surfaces in Railway logs so a connect failure is diagnosable.
+      console.error(`XRPL connect failed for ${url}:`, e instanceof Error ? e.message : e)
+      try { await candidate.disconnect() } catch { /* never connected */ }
+    }
+  }
+  if (!client) {
     return { ...base, note: "Testnet was unreachable; graded on executed transaction structure." }
   }
 
