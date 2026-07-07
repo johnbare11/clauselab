@@ -433,7 +433,7 @@ function ResultsPanel({ result, maxScore, isExecutable }: { result: SubmissionRe
     return () => { cancelled = true }
   }, [createOk, createHash, linkReady])
 
-  const explorerUrl = live?.explorer || (createHash ? `https://testnet.xrpl.org/transactions/${createHash}` : undefined)
+  const explorerUrl = live?.explorer || (createHash ? `https://test.bithomp.com/explorer/${createHash}` : undefined)
   const showExplorerLink = !!explorerUrl && linkReady
   const explorerBusy = createOk && !linkReady
 

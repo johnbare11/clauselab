@@ -9,7 +9,10 @@ import type { EscrowExpect, LiveArtifacts } from "./escrow"
 
 const RPC = process.env.XRPL_TESTNET_RPC || "https://s.altnet.rippletest.net:51234"
 const FAUCET = process.env.XRPL_TESTNET_FAUCET || "https://faucet.altnet.rippletest.net/accounts"
-const EXPLORER = "https://testnet.xrpl.org/transactions/"
+// Bithomp's testnet explorer indexes far faster and more reliably than Ripple's
+// own testnet.xrpl.org, which reads from a laggy backend and often 404s a
+// just-validated transaction. Overridable in case we want to switch explorers.
+const EXPLORER = process.env.XRPL_TESTNET_EXPLORER || "https://test.bithomp.com/explorer/"
 
 export function liveGradingEnabled(): boolean {
   return process.env.XRPL_LIVE_GRADING === "1" || process.env.XRPL_LIVE_GRADING === "true"
