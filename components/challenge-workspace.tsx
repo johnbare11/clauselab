@@ -27,6 +27,7 @@ interface Challenge {
   publicRequirements: Record<string, unknown>
   starterMaterial: string | null
   modelAnswer: string
+  demoPartialAnswer?: string | null
   estimatedMinutes: number
   maxScore: number
   visibleTests: TestCase[]
@@ -133,9 +134,13 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
   }
 
   const loadPartialDraft = () => {
-    const draft = challenge.isExecutable
-      ? buildExecutablePartial(challenge.modelAnswer || "")
-      : buildPartialDraft(challenge.modelAnswer || "")
+    // Prefer the authored partial draft; the derived fallbacks only exist for
+    // challenges seeded before demoPartialAnswer was introduced.
+    const draft =
+      challenge.demoPartialAnswer ||
+      (challenge.isExecutable
+        ? buildExecutablePartial(challenge.modelAnswer || "")
+        : buildPartialDraft(challenge.modelAnswer || ""))
     setAnswer(draft)
     setResult(null)
     setVisibleRunResults(null)

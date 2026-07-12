@@ -53,6 +53,10 @@ model Challenge {
   hiddenTests         Json
   scoringRubric       Json
   modelAnswer         String
+  // Demo aid: a realistic in-progress answer the "Partial draft" button loads.
+  // For executable challenges this must be valid, runnable code that passes
+  // some tests and fails others.
+  demoPartialAnswer   String?
   explanation         String
   tags                String[]
   isXrplRelated       Boolean      @default(false)

@@ -197,6 +197,16 @@ function milestoneAction({ milestone, accepted, contractValue }) {
   }
   return { action: "TERMINATE", refundDue: true }
 }`,
+      demoPartialAnswer: `function milestoneAction({ milestone, signatoryConfirmed, accepted, attempt, daysSinceFailure, contractValue }) {
+  // Signatory gate added - but the failure ladder still forgives forever.
+  if (!signatoryConfirmed) {
+    return { action: "HOLD", reason: "AWAITING_WRITTEN_CONFIRMATION" }
+  }
+  if (milestone === "SIGNATURE") return { action: "PAY", amount: 0.25 * contractValue }
+  if (milestone === "PROTOTYPE") return { action: "PAY", amount: 0.35 * contractValue }
+  if (accepted) return { action: "PAY", amount: 0.40 * contractValue }
+  return { action: "ALLOW_RESUBMISSION" }
+}`,
       explanation: "The buggy engine has two breaches: it pays on events rather than on the buyer's written confirmation (erasing the signatory control that protects the paying party), and its failure path is a single unconditional ALLOW_RESUBMISSION - unlimited retries, no 7-day window, no termination right, no refund. The fix puts the signatory gate first, then encodes the failure ladder exactly: one resubmission inside 7 days, termination with refund after that. The boundary case - day 7 is still inside the window - is the kind of detail that decides real disputes.",
       tags: ["milestones", "payments", "acceptance-testing", "termination", "executable", "legal-engineering"],
       isXrplRelated: false,
@@ -286,6 +296,12 @@ function lateFee({ amount, daysLate }) {
   // Clause 9.3.3 - total late fees capped at 10% of the overdue amount.
   const cap = 0.10 * amount
   return Math.round(Math.min(fee, cap) * 100) / 100
+}`,
+      demoPartialAnswer: `function lateFee({ amount, daysLate }) {
+  // Grace period handled - but the 10% cap is still missing.
+  if (daysLate <= 5) return 0
+  const periods = Math.ceil(daysLate / 30)
+  return Math.round(0.02 * amount * periods * 100) / 100
 }`,
       explanation: "The shipped code gets the visible happy path right (2% per commenced period) but breaches the contract twice: it charges inside the 5-day grace period, and it keeps accruing past the 10% cap. Both look like small numerical details in review; both are refund events under the remediation clause. The fix is three lines that map one-to-one onto the clause: a grace-period guard, the period fee, and a cap. Reading the code against the contract - not against the unit tests - is the skill being measured.",
       tags: ["contract", "late-fees", "cap", "grace-period", "executable", "legal-engineering"],
@@ -516,6 +532,14 @@ function screenPayment({ recipient, sanctions, aliases }) {
   // s.4.2(3) - ALLOW: over-blocking is also a failure.
   return "ALLOW"
 }`,
+      demoPartialAnswer: `function screenPayment({ recipient, sanctions, aliases }) {
+  // Normalisation added - but aliases and reordered names still slip through.
+  const key = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(/\\s+/).filter(Boolean).join(" ")
+  for (const entry of sanctions) {
+    if (key(entry) === key(recipient)) return "BLOCK"
+  }
+  return "ALLOW"
+}`,
       explanation: "The shipped rule only blocks the exact list spelling, so 'IVAN PETROV.' or an alias sails through - a false negative that is a sanctions breach. The fix normalises names (case, punctuation, spacing) before comparing, checks the alias list, and routes reordered names to manual review rather than auto-deciding. Note what it does not do: block near-miss names like 'Ivana Petrova'. Over-blocking (de-risking) harms innocent customers and is itself a regulatory concern - the skill is encoding both duties at once.",
       tags: ["sanctions", "AML", "screening", "debug", "compliance", "executable"],
       isXrplRelated: false,
@@ -694,10 +718,21 @@ function nextEscrowAction({ deliveryConfirmed, hoursSinceDelivery, disputeOpen, 
   // Term 4: no delivery within 30 days -> refund path via EscrowCancel.
   return daysSinceCreate >= 30 ? "CANCEL" : "WAIT"
 }`,
+      demoPartialAnswer: `function nextEscrowAction({ deliveryConfirmed, hoursSinceDelivery, disputeOpen, daysSinceCreate }) {
+  if (disputeOpen) return "ESCALATE"
+  if (deliveryConfirmed) {
+    return hoursSinceDelivery >= 48 ? "FINISH" : "WAIT"
+  }
+  // TODO: the 30-day refund path (EscrowCancel) is still missing.
+  return "WAIT"
+}`,
       explanation: "The buggy controller collapses the whole lifecycle into 'delivered means paid'. That erases the buyer's 48-hour dispute right, routes disputed funds to the seller instead of the arbitrator, and leaves an undelivered escrow locked forever with no refund. The fix orders the checks by legal priority: dispute first (it freezes release), then the dispute window, then the 30-day refund path. On the ledger these map to EscrowFinish, EscrowCancel, or doing nothing - the legal skill is knowing which is lawful when.",
       tags: ["XRPL", "escrow", "EscrowFinish", "EscrowCancel", "dispute", "executable"],
       isXrplRelated: true,
-      requiresXrplTestnet: true,
+      // Off-chain release controller: it decides which transaction is lawful
+      // but does not build one, so live Testnet grading does not apply here -
+      // that is the flagship escrow challenge's job.
+      requiresXrplTestnet: false,
       xrplTxHash: null,
       estimatedMinutes: 20,
       maxScore: 100,
@@ -795,6 +830,16 @@ function processPayment({ senderKycApproved, recipientKycApproved, complianceRef
   }
 
   // Traceability: the compliance reference travels in the XRPL Memo.
+  return { action: "SUBMIT", memo: complianceRef }
+}`,
+      demoPartialAnswer: `function processPayment({ senderKycApproved, recipientKycApproved, sanctionsMatch, complianceRef }) {
+  if (!senderKycApproved || !recipientKycApproved) {
+    return { action: "BLOCK", reason: "KYC_INCOMPLETE" }
+  }
+  // Per-payment screening added - jurisdiction and threshold still missing.
+  if (sanctionsMatch) {
+    return { action: "BLOCK", reason: "SANCTIONS_MATCH" }
+  }
   return { action: "SUBMIT", memo: complianceRef }
 }`,
       explanation: "The shipped gate treats onboarding KYC as permanent clearance. Sanctions designations change daily, so screening must run per payment - and the check order matters: a sanctions hit blocks even a manually-approved payment, which is why the sanctions check sits above the threshold logic rather than beside it. The Memo reference is what lets an auditor tie the on-ledger XRPL transaction back to the compliance decision that authorised it.",
@@ -912,6 +957,17 @@ function approveTransfer({ kind, recipientAuthorised }) {
 
   return { approved: true }
 }`,
+      demoPartialAnswer: `function approveTransfer({ kind, daysSinceIssuance, recipientAuthorised }) {
+  // Lock-up enforced - but KYC, sanctions, jurisdiction, and the
+  // redemption/maturity rules are still missing.
+  if (daysSinceIssuance < 365) {
+    return { approved: false, reason: "LOCKUP_ACTIVE" }
+  }
+  if (!recipientAuthorised) {
+    return { approved: false, reason: "TRUST_LINE_NOT_AUTHORISED" }
+  }
+  return { approved: true }
+}`,
       explanation: "XRPL's RequireAuth flag controls who can hold the token, but everything above that - lock-up, KYC, sanctions, jurisdiction - is platform-enforced, and the buggy gate enforced none of it. The subtleties the hidden tests catch: redemption is exempt from the lock-up (it is the contractual exit, and blocking it would trap investors), but strictly gated on maturity; and 'restricted for the first 12 months' means day 365 is the first tradable day. Getting the exemption wrong in either direction is a real drafting-to-code failure mode.",
       tags: ["XRPL", "tokenisation", "trust-lines", "bonds", "transfer-restrictions", "RequireAuth", "executable"],
       isXrplRelated: true,
@@ -1013,6 +1069,21 @@ function buildRemittanceMemo({ amountGbp, complianceRef, originator, beneficiary
   // forever - only the account reference the rule requires goes on-chain.
   return { ...base, travelRule: { originatorRef: originator.account } }
 }`,
+      demoPartialAnswer: `function buildRemittanceMemo({ amountGbp, complianceRef, originator, beneficiary }) {
+  const base = { corridor: "GBP-KES", complianceRef }
+  // Threshold logic added - but ">= 1000" is not "above 1,000":
+  // a payment of exactly 1,000 must take the minimised form.
+  if (amountGbp >= 1000) {
+    return {
+      ...base,
+      travelRule: {
+        originator: { name: originator.name, account: originator.account, address: originator.address, dateOfBirth: originator.dateOfBirth },
+        beneficiary: { name: beneficiary.name, account: beneficiary.account },
+      },
+    }
+  }
+  return { ...base, travelRule: { originatorRef: originator.account } }
+}`,
       explanation: "The buggy builder fails in the direction engineers rarely consider: over-compliance. Above £1,000 the Travel Rule genuinely requires full originator and beneficiary data to travel with the payment - but below it, writing a customer's name, address, and date of birth into a public, permanent XRPL memo is a data-protection breach, not diligence. The fix is one threshold check that switches between the full IVMS-style payload and a minimised reference - and the hidden boundary tests check that 'above £1,000' means strictly above. Knowing what data must travel AND what data must not is the actual compliance skill.",
       tags: ["XRPL", "payments", "remittance", "cross-border", "travel-rule", "data-protection", "executable"],
       isXrplRelated: true,
@@ -1110,6 +1181,16 @@ function buildKycCredential({ subjectAccount, issuerAccount, kycPassedAt, validi
     Expiration: kycPassedAt + validityDays * 86400,
   }
 }`,
+      demoPartialAnswer: `function buildKycCredential({ subjectAccount, issuerAccount, evidenceHash }) {
+  // PII removed from the on-ledger object - but the credential
+  // still never expires, so a stale KYC keeps granting access.
+  return {
+    CredentialType: "KYC",
+    Subject: subjectAccount,
+    Issuer: issuerAccount,
+    EvidenceHash: evidenceHash,
+  }
+}`,
       explanation: "Two failures hide in the original. First, writing name, date of birth, and passport number into an XRPL object publishes them permanently - the GDPR right to erasure cannot be honoured on an append-only ledger, so the only compliant design keeps PII off-chain and anchors it by hash. Second, a credential without an Expiration outlives the KYC review it attests to, so access persists after the verification has gone stale. The model answer simply refuses the PII inputs - the deepest fix in legal engineering is often what you leave out.",
       tags: ["XRPL", "identity", "DID", "credentials", "KYC", "privacy", "GDPR", "executable"],
       isXrplRelated: true,
@@ -1188,6 +1269,17 @@ function buildEscrow({ destination, amountXrp, now }) {
     FinishAfter: now + 48 * HOUR,
     // Buyer refundable if the seller has not delivered within 30 days:
     CancelAfter: now + 30 * DAY,
+  }
+}`,
+      demoPartialAnswer: `function buildEscrow({ destination, amountXrp, now }) {
+  const HOUR = 3600
+  return {
+    TransactionType: "EscrowCreate",
+    Amount: drops(amountXrp),
+    Destination: destination,
+    // Release only permitted after the 48-hour dispute window closes:
+    FinishAfter: now + 48 * HOUR,
+    // TODO: the 30-day refund path is still missing.
   }
 }`,
       explanation: "The original code omits FinishAfter and CancelAfter. Without FinishAfter, an EscrowFinish can release funds immediately - there is no dispute window, so the buyer's contractual right to contest delivery is unenforceable. Without CancelAfter, a non-delivering seller leaves the buyer's funds locked forever with no refund path. A developer sees valid code; a legal engineer sees that the protocol is not encoding the deal's obligations. The fix adds both time bounds (with CancelAfter strictly after FinishAfter, which the ledger also requires).",
