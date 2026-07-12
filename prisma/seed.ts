@@ -150,6 +150,96 @@ async function main() {
       maxScore: 100,
     },
     {
+      title: "Fix the Late-Fee Calculator That Breaches the Contract",
+      slug: "fix-late-fee-cap-breach",
+      trackId: trackMap["legal-engineering"],
+      mode: Mode.MODIFY,
+      difficulty: Difficulty.BEGINNER,
+      description: "A late-fee function passes its unit tests but overcharges in exactly the ways the contract forbids. Fix the code. It is executed against the deal's payment scenarios and graded on the numbers it actually returns.",
+      scenario: `A services agreement (Clause 9.3) sets out late-payment fees:\n- No fee if payment arrives within the 5-day grace period after the due date.\n- After that: 2% of the overdue amount for each commenced 30-day period, counted from the due date.\n- Late fees are capped at 10% of the overdue amount in total.\n\nFinance shipped the calculator below. The numbers "look right" and the happy-path unit test passes. But it charges customers during the grace period and keeps charging past the contractual cap - both are breaches that would have to be refunded, with interest, under the agreement's remediation clause.\n\nFix lateFee so it charges exactly what the contract allows. The platform runs your code against payment scenarios from the deal (including hidden boundary cases) and grades the fees it actually returns.`,
+      publicRequirements: {
+        function: "lateFee({ amount, daysLate }) -> fee as a number, rounded to 2 decimal places",
+        contractTerms: [
+          "Clause 9.3.1: no fee within the 5-day grace period",
+          "Clause 9.3.2: 2% of the overdue amount per commenced 30-day period from the due date",
+          "Clause 9.3.3: total late fees capped at 10% of the overdue amount",
+        ],
+        note: "Your code runs in a sandbox; it must return a number.",
+      },
+      starterMaterialType: "js",
+      starterMaterial: `// Late-fee calculator for the services agreement (Clause 9.3).
+//
+// CONTRACT TERMS:
+//   9.3.1  No late fee if payment arrives within the 5-day grace period.
+//   9.3.2  After that: 2% of the overdue amount for each commenced
+//          30-day period, counted from the due date.
+//   9.3.3  Late fees are capped at 10% of the overdue amount in total.
+//
+// Finance signed this off - the numbers "look right". They are not.
+// Fix lateFee so it charges exactly what the contract allows.
+function lateFee({ amount, daysLate }) {
+  const periods = Math.ceil(daysLate / 30)
+  const fee = 0.02 * amount * periods
+  return Math.round(fee * 100) / 100
+}`,
+      expectedSolution: {
+        kind: "pure-function",
+        entry: "lateFee",
+        groups: {
+          standardPeriod: [
+            { label: "£10,000 paid 20 days late (one period)", input: { amount: 10000, daysLate: 20 }, expect: 200 },
+          ],
+          graceWindow: [
+            { label: "£10,000 paid 3 days late (within grace)", input: { amount: 10000, daysLate: 3 }, expect: 0 },
+          ],
+          capApplied: [
+            { label: "£10,000 paid 200 days late (cap binds)", input: { amount: 10000, daysLate: 200 }, expect: 1000 },
+          ],
+          graceBoundary: [
+            { label: "Exactly 5 days late (last day of grace)", input: { amount: 10000, daysLate: 5 }, expect: 0 },
+            { label: "6 days late (first chargeable day)", input: { amount: 10000, daysLate: 6 }, expect: 200 },
+          ],
+          periodBoundary: [
+            { label: "30 days late (still one period)", input: { amount: 10000, daysLate: 30 }, expect: 200 },
+            { label: "31 days late (second period commences)", input: { amount: 10000, daysLate: 31 }, expect: 400 },
+          ],
+          capBoundary: [
+            { label: "150 days late (fee meets the cap exactly)", input: { amount: 10000, daysLate: 150 }, expect: 1000 },
+            { label: "180 days late (fee must not exceed the cap)", input: { amount: 10000, daysLate: 180 }, expect: 1000 },
+          ],
+        },
+      },
+      visibleTests: [
+        { id: "vt1", description: "Standard late payment is charged 2% per period", type: "execution", check: "standardPeriod", weight: 20, isVisible: true },
+        { id: "vt2", description: "No fee is charged within the grace period", type: "execution", check: "graceWindow", weight: 20, isVisible: true },
+        { id: "vt3", description: "Fees are capped at 10% of the overdue amount", type: "execution", check: "capApplied", weight: 20, isVisible: true },
+      ],
+      hiddenTests: [
+        { id: "ht1", description: "Grace-period boundary days are handled exactly", type: "execution", check: "graceBoundary", weight: 15, isVisible: false },
+        { id: "ht2", description: "Period boundaries follow 'commenced 30-day period'", type: "execution", check: "periodBoundary", weight: 15, isVisible: false },
+        { id: "ht3", description: "The cap holds at and beyond the crossover point", type: "execution", check: "capBoundary", weight: 10, isVisible: false },
+      ],
+      scoringRubric: { totalWeight: 100, passMark: 60 },
+      modelAnswer: `function lateFee({ amount, daysLate }) {
+  // Clause 9.3.1 - grace period: nothing is chargeable at 5 days or less.
+  if (daysLate <= 5) return 0
+
+  // Clause 9.3.2 - 2% per commenced 30-day period from the due date.
+  const periods = Math.ceil(daysLate / 30)
+  const fee = 0.02 * amount * periods
+
+  // Clause 9.3.3 - total late fees capped at 10% of the overdue amount.
+  const cap = 0.10 * amount
+  return Math.round(Math.min(fee, cap) * 100) / 100
+}`,
+      explanation: "The shipped code gets the visible happy path right (2% per commenced period) but breaches the contract twice: it charges inside the 5-day grace period, and it keeps accruing past the 10% cap. Both look like small numerical details in review; both are refund events under the remediation clause. The fix is three lines that map one-to-one onto the clause: a grace-period guard, the period fee, and a cap. Reading the code against the contract - not against the unit tests - is the skill being measured.",
+      tags: ["contract", "late-fees", "cap", "grace-period", "executable", "legal-engineering"],
+      isXrplRelated: false,
+      requiresXrplTestnet: false,
+      estimatedMinutes: 15,
+      maxScore: 100,
+    },
+    {
       title: "Modify a Termination Clause",
       slug: "modify-termination-clause",
       trackId: trackMap["legal-engineering"],
@@ -273,51 +363,105 @@ async function main() {
       maxScore: 100,
     },
     {
-      title: "Debug a Sanctions Screening Rule",
+      title: "Fix the Screening Rule That Cleared a Sanctioned Payment",
       slug: "debug-sanctions-screening-rule",
       trackId: trackMap["compliance-risk"],
       mode: Mode.DEBUG,
       difficulty: Difficulty.INTERMEDIATE,
-      description: "A sanctions screening rule has a logic flaw. Identify the failure, explain why it occurred, and produce a corrected version.",
-      scenario: `A payment platform's automated sanctions screening rule was passing payments that should have been blocked. An audit found that a payment of £8,500 to a sanctioned entity was processed successfully because the entity's name appeared on the sanctions list under a slightly different spelling.\n\nThe current rule logic is producing false negatives. You must identify the flaw and fix it.`,
+      description: "A sanctions screening function passed code review - and an £8,500 payment to a sanctioned entity. Fix the code. It is executed against real screening scenarios and graded on the decisions it actually makes.",
+      scenario: `A payment platform's automated sanctions screening cleared an £8,500 payment to a sanctioned entity. The audit found the entity was on the list - under a slightly different spelling.\n\nThe screening function below is what shipped. It compiles, it has unit tests, and it looks reasonable in review. It is also a regulatory breach waiting to happen - and over-blocking innocent customers would be a failure too.\n\nFix screenPayment so it makes the decisions the compliance manual requires. The platform runs your code against a set of screening scenarios (including hidden edge cases) and grades the actual decisions it returns.`,
       publicRequirements: {
-        brokenRule: {
-          name: "SanctionsCheck_v1",
-          logic: "IF recipient_name EXACT_MATCH sanctions_list THEN block_payment ELSE allow_payment",
-          knownFailures: [
-            "Transliteration variants not matched (e.g. 'Al-Qaeda' vs 'Al Qaeda')",
-            "Name order variations not caught (e.g. 'John Smith' vs 'Smith, John')",
-            "Aliases not checked",
-            "Partial name matches not flagged for review",
+        function: 'screenPayment({ recipient, sanctions, aliases }) -> "BLOCK" | "REVIEW" | "ALLOW"',
+        complianceManual: [
+          "BLOCK when the recipient matches a sanctions entry or a known alias - ignoring case, punctuation, and extra spaces",
+          "REVIEW when the same name appears with its parts reordered (e.g. 'Petrov, Ivan' vs 'Ivan Petrov')",
+          "ALLOW everything else - blocking innocent customers (de-risking) is also a compliance failure",
+        ],
+        note: "Your code runs in a sandbox; it must return one of the three decision strings.",
+      },
+      starterMaterialType: "js",
+      starterMaterial: `// Outbound payment sanctions screening.
+//
+// COMPLIANCE MANUAL (s.4.2 - screening decisions):
+//   1. BLOCK: recipient matches a sanctions entry or a known alias,
+//      ignoring case, punctuation, and extra spaces.
+//   2. REVIEW: the same name with its parts reordered
+//      (e.g. "Petrov, Ivan" vs "Ivan Petrov").
+//   3. ALLOW everything else. Over-blocking innocent customers is
+//      also a failure.
+//
+// This version screens the exact list spelling only. It passed code
+// review - and an £8,500 payment to a sanctioned entity.
+// Fix screenPayment.
+function screenPayment({ recipient, sanctions, aliases }) {
+  for (const name of sanctions) {
+    if (recipient === name) return "BLOCK"
+  }
+  return "ALLOW"
+}`,
+      expectedSolution: {
+        kind: "pure-function",
+        entry: "screenPayment",
+        groups: {
+          exactBlock: [
+            { label: "Recipient exactly on the sanctions list", input: { recipient: "Ivan Petrov", sanctions: ["Ivan Petrov", "Aurora Shipping Ltd"], aliases: ["Vanya Petrov", "Aurora Shipping Limited"] }, expect: "BLOCK" },
+          ],
+          normalisedBlock: [
+            { label: "Upper case with trailing punctuation", input: { recipient: "IVAN PETROV.", sanctions: ["Ivan Petrov", "Aurora Shipping Ltd"], aliases: ["Vanya Petrov", "Aurora Shipping Limited"] }, expect: "BLOCK" },
+            { label: "Extra internal spaces", input: { recipient: "Aurora  Shipping   Ltd", sanctions: ["Ivan Petrov", "Aurora Shipping Ltd"], aliases: ["Vanya Petrov", "Aurora Shipping Limited"] }, expect: "BLOCK" },
+          ],
+          aliasBlock: [
+            { label: "Known alias of a listed person", input: { recipient: "Vanya Petrov", sanctions: ["Ivan Petrov", "Aurora Shipping Ltd"], aliases: ["Vanya Petrov", "Aurora Shipping Limited"] }, expect: "BLOCK" },
+          ],
+          reorderedReview: [
+            { label: "Surname-first ordering of a listed name", input: { recipient: "Petrov, Ivan", sanctions: ["Ivan Petrov", "Aurora Shipping Ltd"], aliases: ["Vanya Petrov", "Aurora Shipping Limited"] }, expect: "REVIEW" },
+          ],
+          innocentAllowed: [
+            { label: "Unrelated customer", input: { recipient: "Maria Santos", sanctions: ["Ivan Petrov", "Aurora Shipping Ltd"], aliases: ["Vanya Petrov", "Aurora Shipping Limited"] }, expect: "ALLOW" },
+            { label: "Similar but distinct name (must not over-block)", input: { recipient: "Ivana Petrova", sanctions: ["Ivan Petrov", "Aurora Shipping Ltd"], aliases: ["Vanya Petrov", "Aurora Shipping Limited"] }, expect: "ALLOW" },
+          ],
+          aliasNormalised: [
+            { label: "Alias in upper case", input: { recipient: "VANYA PETROV", sanctions: ["Ivan Petrov", "Aurora Shipping Ltd"], aliases: ["Vanya Petrov", "Aurora Shipping Limited"] }, expect: "BLOCK" },
           ],
         },
-        requirements: [
-          "Fuzzy matching with configurable threshold (recommended: 85% similarity)",
-          "Alias list checking",
-          "Name order normalisation",
-          "Partial matches above 70% threshold sent for manual review",
-          "All screening decisions must be logged with match score",
-        ],
       },
-      starterMaterial: "IF recipient_name EXACT_MATCH sanctions_list THEN block_payment ELSE allow_payment",
-      starterMaterialType: "pseudocode",
       visibleTests: [
-        { id: "vt1", description: "Exact match identified as the root flaw", type: "concept", concepts: ["exact match", "exact"], weight: 15, isVisible: true },
-        { id: "vt2", description: "Fuzzy matching proposed as fix", type: "concept", concepts: ["fuzzy", "similarity"], weight: 15, isVisible: true },
+        { id: "vt1", description: "Exact sanctions-list matches are blocked", type: "execution", check: "exactBlock", weight: 15, isVisible: true },
+        { id: "vt2", description: "Case, punctuation and spacing variants are still blocked", type: "execution", check: "normalisedBlock", weight: 20, isVisible: true },
+        { id: "vt3", description: "Known aliases are blocked", type: "execution", check: "aliasBlock", weight: 15, isVisible: true },
       ],
       hiddenTests: [
-        { id: "ht1", description: "Alias list checking included in fix", type: "concept", concepts: ["alias"], weight: 20, isVisible: false },
-        { id: "ht2", description: "Name normalisation addresses order variations", type: "concept", concepts: ["normalise", "normalize", "name order"], weight: 15, isVisible: false },
-        { id: "ht3", description: "Partial match threshold triggers manual review", type: "concept", concepts: ["manual review", "partial match", "70%"], weight: 20, isVisible: false },
-        { id: "ht4", description: "Audit log of all screening decisions required", type: "concept", concepts: ["log", "audit"], weight: 15, isVisible: false },
+        { id: "ht1", description: "Reordered names are sent to manual review", type: "execution", check: "reorderedReview", weight: 20, isVisible: false },
+        { id: "ht2", description: "Innocent customers are not over-blocked", type: "execution", check: "innocentAllowed", weight: 15, isVisible: false },
+        { id: "ht3", description: "Alias matching is normalisation-aware", type: "execution", check: "aliasNormalised", weight: 15, isVisible: false },
       ],
       scoringRubric: { totalWeight: 100, passMark: 60 },
-      modelAnswer: `ROOT CAUSE:\nThe rule uses exact string matching, which fails on transliteration variants, aliases, name order differences, and typographical variations. This is a known weakness in sanctions screening that creates false negatives.\n\nCORRECTED RULE:\n\nFUNCTION screen_payment(recipient_name, amount):\n  normalised_name = normalise(recipient_name)  // lowercase, remove punctuation, standardise name order\n  \n  FOR EACH entry IN sanctions_list + alias_list:\n    normalised_entry = normalise(entry)\n    match_score = fuzzy_match(normalised_name, normalised_entry)  // e.g. Jaro-Winkler or Levenshtein\n    \n    IF match_score >= 0.85:\n      block_payment()\n      log(recipient_name, entry, match_score, "BLOCKED")\n      RETURN\n    \n    IF match_score >= 0.70:\n      flag_for_manual_review()\n      log(recipient_name, entry, match_score, "MANUAL_REVIEW")\n      RETURN\n  \n  allow_payment()\n  log(recipient_name, null, 0, "PASSED")\n\nKEY CHANGES:\n1. Fuzzy matching (≥85% = block, 70-85% = manual review)\n2. Alias list checked alongside primary list\n3. Name normalisation before comparison\n4. All decisions logged with match score for audit trail`,
-      explanation: "Exact match sanctions screening is a compliance failure mode. Real systems use fuzzy matching with multiple thresholds: high confidence blocks automatically, medium confidence triggers manual review.",
-      tags: ["sanctions", "AML", "fuzzy-matching", "debug", "compliance"],
+      modelAnswer: `function screenPayment({ recipient, sanctions, aliases }) {
+  // Normalise: lower-case, strip punctuation, collapse whitespace.
+  const tokens = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(/\\s+/).filter(Boolean)
+  const exact = (s) => tokens(s).join(" ")
+  const sorted = (s) => tokens(s).sort().join(" ")
+
+  const listed = [...sanctions, ...aliases]
+
+  // s.4.2(1) - BLOCK: normalised match against the list or a known alias.
+  for (const entry of listed) {
+    if (exact(entry) === exact(recipient)) return "BLOCK"
+  }
+
+  // s.4.2(2) - REVIEW: same name parts in a different order.
+  for (const entry of listed) {
+    if (sorted(entry) === sorted(recipient)) return "REVIEW"
+  }
+
+  // s.4.2(3) - ALLOW: over-blocking is also a failure.
+  return "ALLOW"
+}`,
+      explanation: "The shipped rule only blocks the exact list spelling, so 'IVAN PETROV.' or an alias sails through - a false negative that is a sanctions breach. The fix normalises names (case, punctuation, spacing) before comparing, checks the alias list, and routes reordered names to manual review rather than auto-deciding. Note what it does not do: block near-miss names like 'Ivana Petrova'. Over-blocking (de-risking) harms innocent customers and is itself a regulatory concern - the skill is encoding both duties at once.",
+      tags: ["sanctions", "AML", "screening", "debug", "compliance", "executable"],
       isXrplRelated: false,
       requiresXrplTestnet: false,
-      estimatedMinutes: 20,
+      estimatedMinutes: 25,
       maxScore: 100,
     },
 
@@ -697,9 +841,11 @@ function buildEscrow({ destination, amountXrp, now }) {
   ]
 
   for (const ch of challenges) {
+    // update mirrors create so content fixes to existing challenges actually
+    // apply on redeploy (update: {} would leave stale rows in place forever).
     await prisma.challenge.upsert({
       where: { slug: ch.slug },
-      update: {},
+      update: { ...ch },
       create: {
         ...ch,
         published: true,

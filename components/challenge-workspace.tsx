@@ -305,13 +305,13 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
             {submitError && (
               <span className="text-[11px] text-red-400">{submitError}</span>
             )}
-            {challenge.isExecutable && submitting && (
+            {challenge.isExecutable && isXrpl && submitting && (
               <span className="flex items-center gap-1.5 text-[11px] text-blue-300/90">
                 <span className="inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
                 Submitting to XRPL Testnet · usually ~10s
               </span>
             )}
-            {challenge.isExecutable && !submitting && (
+            {challenge.isExecutable && isXrpl && !submitting && (
               <span className="text-[11px] text-gray-600">Live ledger grading · takes ~10s</span>
             )}
             <button onClick={runVisibleTests}
@@ -319,9 +319,9 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
               {challenge.isExecutable ? "Run code" : "Run visible tests"}
             </button>
             <button onClick={submit} disabled={submitting || !answer.trim()}
-              title={challenge.isExecutable ? "Runs your code and grades the XRPL transaction it produces" : undefined}
+              title={challenge.isExecutable ? (isXrpl ? "Runs your code and grades the XRPL transaction it produces" : "Runs your code and grades its actual outputs") : undefined}
               className="text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-1 rounded transition-colors font-medium">
-              {submitting ? (challenge.isExecutable ? "Executing on Testnet…" : "Submitting...") : "Submit"}
+              {submitting ? (challenge.isExecutable ? (isXrpl ? "Executing on Testnet…" : "Running code…") : "Submitting...") : "Submit"}
             </button>
           </div>
         </div>
@@ -329,7 +329,7 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
         {/* Editor */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="border-b border-[#1a1a1a] px-4 py-1.5 flex items-center gap-2 bg-[#0d0d0d]">
-            <span className="text-xs text-gray-600">{challenge.isExecutable ? "Code · TypeScript (xrpl.js)" : "Answer"}</span>
+            <span className="text-xs text-gray-600">{challenge.isExecutable ? (isXrpl ? "Code · JavaScript (xrpl.js)" : "Code · JavaScript") : "Answer"}</span>
             <span className="text-xs text-gray-700">·</span>
             <span className="text-xs text-gray-600">{answer.length} chars</span>
 
@@ -467,7 +467,7 @@ function ResultsPanel({ result, maxScore, isExecutable }: { result: SubmissionRe
         </div>
       </div>
 
-      {isExecutable && (
+      {isExecutable && live && (
         <div className="border border-[#1e1e1e] rounded p-3 bg-[#0a0a0a]">
           <div className="flex items-center gap-2 mb-2">
             <span className={`w-1.5 h-1.5 rounded-full ${live?.available ? "bg-emerald-400" : "bg-gray-600"}`} />
