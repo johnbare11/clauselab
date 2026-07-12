@@ -107,43 +107,98 @@ async function main() {
   const challenges = [
     // ─── LEGAL ENGINEERING ────────────────────────────────────────────────
     {
-      title: "Build Milestone Payment Logic",
+      title: "Fix the Milestone Payment Logic That Pays Without Sign-Off",
       slug: "build-milestone-payment-logic",
       trackId: trackMap["legal-engineering"],
-      mode: Mode.BUILD,
+      mode: Mode.DEBUG,
       difficulty: Difficulty.BEGINNER,
-      description: "Design a complete milestone payment workflow from commercial requirements.",
-      scenario: `A software development company has agreed to build a custom compliance platform for a financial institution. The parties want milestone-based payments to protect both sides during delivery.\n\nThe commercial terms are:\n- 25% paid on contract signature\n- 35% paid on delivery of the working prototype\n- 40% paid on successful acceptance testing\n\nAdditional constraints:\n- Acceptance testing must be completed within 14 days of prototype delivery\n- If acceptance testing fails, the supplier has one opportunity to resubmit within 7 days\n- If the second submission also fails, the buyer may terminate and claim a partial refund of the final milestone\n- All milestone payments require written confirmation from the buyer's authorised signatory`,
+      description: "The milestone payment engine releases money without the buyer's written sign-off and lets the supplier resubmit failed acceptance tests forever. Fix the code. It is executed against the contract's delivery scenarios and graded on the actions it actually takes.",
+      scenario: `A software supplier is building a compliance platform for a financial institution under milestone-based payment terms:\n- 25% on contract signature, 35% on prototype delivery, 40% on successful acceptance testing.\n- Every milestone payment requires written confirmation from the buyer's authorised signatory - no confirmation, no payment.\n- If acceptance testing fails, the supplier has ONE opportunity to resubmit, within 7 days of the failure.\n- If the second submission fails - or the 7-day resubmission window lapses - the buyer may terminate, with a partial refund of the final milestone due.\n\nThe payment engine below pays out as soon as each milestone event fires, with no signatory gate, and lets the supplier resubmit failed acceptance tests without limit. It looks generous; it is a breach machine.\n\nFix milestoneAction. The platform runs your code against delivery scenarios (including hidden failure paths) and grades the actions it returns.`,
       publicRequirements: {
-        milestones: [
-          { name: "Signature", percentage: 25, trigger: "Contract execution" },
-          { name: "Prototype", percentage: 35, trigger: "Delivery confirmation" },
-          { name: "Acceptance", percentage: 40, trigger: "Successful acceptance testing" },
+        function: 'milestoneAction({ milestone, signatoryConfirmed, accepted, attempt, daysSinceFailure, contractValue }) -> action object',
+        decisions: [
+          '{ action: "HOLD", reason: "AWAITING_WRITTEN_CONFIRMATION" } when the signatory has not confirmed',
+          '{ action: "PAY", amount } for a confirmed milestone (25% / 35% / 40% of contractValue)',
+          '{ action: "ALLOW_RESUBMISSION" } after a FIRST acceptance failure, within 7 days',
+          '{ action: "TERMINATE", refundDue: true } on a second failure or a lapsed resubmission window',
         ],
-        constraints: [
-          "Acceptance testing window: 14 days from prototype delivery",
-          "One resubmission permitted within 7 days of failure",
-          "Termination right on second failure with partial refund",
-          "Written signatory confirmation required for each milestone",
-        ],
+        note: 'milestone is "SIGNATURE" | "PROTOTYPE" | "ACCEPTANCE". attempt counts acceptance submissions; accepted and daysSinceFailure apply to ACCEPTANCE only.',
       },
-      starterMaterial: null,
+      starterMaterialType: "js",
+      starterMaterial: `// Milestone payment engine for the platform build contract.
+//
+// COMMERCIAL TERMS:
+//   1. 25% on signature, 35% on prototype, 40% on acceptance.
+//   2. EVERY payment needs the buyer's written signatory confirmation.
+//   3. Failed acceptance: ONE resubmission, within 7 days of failure.
+//   4. Second failure or lapsed window: buyer may terminate,
+//      partial refund of the final milestone due.
+//
+// This version pays on every event and forgives failure forever.
+// Fix milestoneAction.
+function milestoneAction({ milestone, accepted, contractValue }) {
+  if (milestone === "SIGNATURE") return { action: "PAY", amount: 0.25 * contractValue }
+  if (milestone === "PROTOTYPE") return { action: "PAY", amount: 0.35 * contractValue }
+  if (accepted) return { action: "PAY", amount: 0.40 * contractValue }
+  return { action: "ALLOW_RESUBMISSION" }
+}`,
+      expectedSolution: {
+        kind: "pure-function",
+        entry: "milestoneAction",
+        groups: {
+          signatureMilestone: [
+            { label: "Confirmed signature milestone pays 25%", input: { milestone: "SIGNATURE", signatoryConfirmed: true, accepted: false, attempt: 0, daysSinceFailure: 0, contractValue: 100000 }, expect: { action: "PAY", amount: 25000 } },
+          ],
+          writtenConfirmationGate: [
+            { label: "Prototype delivered but no written sign-off yet", input: { milestone: "PROTOTYPE", signatoryConfirmed: false, accepted: false, attempt: 0, daysSinceFailure: 0, contractValue: 100000 }, expect: { action: "HOLD", reason: "AWAITING_WRITTEN_CONFIRMATION" } },
+          ],
+          acceptancePaid: [
+            { label: "Confirmed, passed acceptance pays 40%", input: { milestone: "ACCEPTANCE", signatoryConfirmed: true, accepted: true, attempt: 1, daysSinceFailure: 0, contractValue: 100000 }, expect: { action: "PAY", amount: 40000 } },
+          ],
+          resubmissionOnce: [
+            { label: "First failure, day 3 - resubmission allowed", input: { milestone: "ACCEPTANCE", signatoryConfirmed: true, accepted: false, attempt: 1, daysSinceFailure: 3, contractValue: 100000 }, expect: { action: "ALLOW_RESUBMISSION" } },
+          ],
+          secondFailureTerminates: [
+            { label: "Second failure - termination with refund", input: { milestone: "ACCEPTANCE", signatoryConfirmed: true, accepted: false, attempt: 2, daysSinceFailure: 2, contractValue: 100000 }, expect: { action: "TERMINATE", refundDue: true } },
+          ],
+          resubmissionWindow: [
+            { label: "First failure but window lapsed (day 10)", input: { milestone: "ACCEPTANCE", signatoryConfirmed: true, accepted: false, attempt: 1, daysSinceFailure: 10, contractValue: 100000 }, expect: { action: "TERMINATE", refundDue: true } },
+            { label: "Day 7 exactly - still within the window", input: { milestone: "ACCEPTANCE", signatoryConfirmed: true, accepted: false, attempt: 1, daysSinceFailure: 7, contractValue: 100000 }, expect: { action: "ALLOW_RESUBMISSION" } },
+          ],
+        },
+      },
       visibleTests: [
-        { id: "vt1", description: "All three milestones are defined with correct percentages", type: "keyword", keywords: ["25%", "35%", "40%"], weight: 10, isVisible: true },
-        { id: "vt2", description: "14-day acceptance testing window is specified", type: "concept", concepts: ["14 day"], weight: 10, isVisible: true },
-        { id: "vt3", description: "Resubmission right is addressed", type: "concept", concepts: ["resubmit"], weight: 10, isVisible: true },
+        { id: "vt1", description: "Milestone percentages pay correctly when confirmed", type: "execution", check: "signatureMilestone", weight: 15, isVisible: true },
+        { id: "vt2", description: "No payment without written signatory confirmation", type: "execution", check: "writtenConfirmationGate", weight: 20, isVisible: true },
+        { id: "vt3", description: "Passed acceptance releases the final 40%", type: "execution", check: "acceptancePaid", weight: 15, isVisible: true },
       ],
       hiddenTests: [
-        { id: "ht1", description: "Handles acceptance failure on first attempt", type: "concept", concepts: ["fail", "resubmit"], weight: 15, isVisible: false },
-        { id: "ht2", description: "Handles second acceptance failure with termination", type: "concept", concepts: ["terminat", "second"], weight: 15, isVisible: false },
-        { id: "ht3", description: "Partial refund mechanism on termination is specified", type: "concept", concepts: ["refund", "partial"], weight: 15, isVisible: false },
-        { id: "ht4", description: "Written authorisation requirement captured", type: "concept", concepts: ["written", "authoris"], weight: 10, isVisible: false },
-        { id: "ht5", description: "7-day resubmission window is specified", type: "concept", concepts: ["7 day"], weight: 15, isVisible: false },
+        { id: "ht1", description: "One resubmission is allowed after a first failure", type: "execution", check: "resubmissionOnce", weight: 15, isVisible: false },
+        { id: "ht2", description: "A second failure triggers termination with refund", type: "execution", check: "secondFailureTerminates", weight: 20, isVisible: false },
+        { id: "ht3", description: "The 7-day resubmission window is enforced exactly", type: "execution", check: "resubmissionWindow", weight: 15, isVisible: false },
       ],
       scoringRubric: { totalWeight: 100, passMark: 60 },
-      modelAnswer: `MILESTONE PAYMENT LOGIC\n\nMilestone 1 - Contract Signature (25%)\nTrigger: Execution of agreement by both parties\nPayment: 25% of total contract value\nCondition: Authorised signatory written confirmation required\n\nMilestone 2 - Prototype Delivery (35%)\nTrigger: Supplier notifies buyer of prototype availability\nPayment: 35% of total contract value\nCondition: Written delivery confirmation from buyer's authorised signatory\nDeadline: Initiates 14-day acceptance testing window\n\nMilestone 3 - Acceptance Testing (40%)\nTrigger: Successful completion of acceptance testing\nPayment: 40% of total contract value\nCondition: Written acceptance confirmation from buyer's authorised signatory\n\nFAILURE HANDLING:\nOn first failure: Supplier may resubmit within 7 days\nOn second failure: Buyer may terminate; partial refund of milestone 3 applies\nResubmission right: One only; expires after 7 days from failure notice\n\nSTATE TRANSITIONS:\nDRAFT → SIGNED → PROTOTYPE_DELIVERED → TESTING → (ACCEPTED | FAILED_1 | FAILED_2)\nFAILED_1 → RESUBMITTED → (ACCEPTED | FAILED_2)\nFAILED_2 → TERMINATED`,
-      explanation: "This challenge tests your ability to translate commercial milestone structures into precise logical conditions, including failure paths that protect both parties.",
-      tags: ["milestones", "payments", "acceptance-testing", "termination"],
+      modelAnswer: `function milestoneAction({ milestone, signatoryConfirmed, accepted, attempt, daysSinceFailure, contractValue }) {
+  // Term 2: no milestone pays without the buyer's written sign-off.
+  if (!signatoryConfirmed) {
+    return { action: "HOLD", reason: "AWAITING_WRITTEN_CONFIRMATION" }
+  }
+
+  if (milestone === "SIGNATURE") return { action: "PAY", amount: 0.25 * contractValue }
+  if (milestone === "PROTOTYPE") return { action: "PAY", amount: 0.35 * contractValue }
+
+  // ACCEPTANCE:
+  if (accepted) return { action: "PAY", amount: 0.40 * contractValue }
+
+  // Terms 3-4: one resubmission, within 7 days; otherwise termination
+  // with a partial refund of the final milestone.
+  if (attempt === 1 && daysSinceFailure <= 7) {
+    return { action: "ALLOW_RESUBMISSION" }
+  }
+  return { action: "TERMINATE", refundDue: true }
+}`,
+      explanation: "The buggy engine has two breaches: it pays on events rather than on the buyer's written confirmation (erasing the signatory control that protects the paying party), and its failure path is a single unconditional ALLOW_RESUBMISSION - unlimited retries, no 7-day window, no termination right, no refund. The fix puts the signatory gate first, then encodes the failure ladder exactly: one resubmission inside 7 days, termination with refund after that. The boundary case - day 7 is still inside the window - is the kind of detail that decides real disputes.",
+      tags: ["milestones", "payments", "acceptance-testing", "termination", "executable", "legal-engineering"],
       isXrplRelated: false,
       requiresXrplTestnet: false,
       estimatedMinutes: 20,
@@ -280,6 +335,10 @@ function lateFee({ amount, daysLate }) {
       maxScore: 100,
     },
     {
+      // Retired: its state-transition skill is now tested (executably) by the
+      // milestone payment challenge; the keyword-graded essay version stays
+      // unpublished rather than diluting the code-first library.
+      published: false,
       title: "Design a Contract State Machine",
       slug: "design-contract-state-machine",
       trackId: trackMap["legal-engineering"],
@@ -555,207 +614,507 @@ function screenPayment({ recipient, sanctions, aliases }) {
 
     // ─── XRPL ESCROW ─────────────────────────────────────────────────────
     {
-      title: "Build XRPL Escrow Release Logic",
+      title: "Fix the Escrow Release Logic That Pays Before the Dispute Window",
       slug: "build-xrpl-escrow-release-logic",
       trackId: trackMap["xrpl-escrow"],
-      mode: Mode.BUILD,
+      mode: Mode.DEBUG,
       difficulty: Difficulty.BEGINNER,
-      description: "Design a complete escrow release workflow using XRPL escrow primitives. This challenge loads live data from XRPL Testnet.",
-      scenario: `A fintech company wants to use the XRP Ledger's native escrow functionality to automate conditional payment release between a buyer and seller.\n\nThe legal requirements are:\n- Buyer deposits XRP into an XRPL EscrowCreate transaction\n- Funds are locked until the seller confirms delivery off-chain\n- Buyer has 48 hours after delivery confirmation to raise a dispute\n- If no dispute is raised within 48 hours, an EscrowFinish transaction may be submitted\n- If a dispute is raised, funds remain locked and a human arbitrator is notified\n- If the seller fails to deliver within 30 days, the buyer may submit an EscrowCancel after the CancelAfter time\n\nYou must design the complete workflow, including the XRPL transaction types used at each step, the off-chain conditions, and the failure handling.`,
+      description: "The release controller for an XRPL escrow pays the seller the moment delivery is confirmed - no dispute window, no refund path, no arbitrator. Fix the code. It is executed against the deal's lifecycle scenarios and graded on the actions it actually chooses.",
+      scenario: `A fintech settles buyer-seller trades with XRPL native escrow. An off-chain controller decides, at each point in the lifecycle, which action the platform takes next: submit EscrowFinish, submit EscrowCancel, wait, or escalate to the arbitrator.\n\nThe legal requirements are:\n- The buyer has 48 hours after delivery confirmation to raise a dispute.\n- If no dispute is raised within 48 hours, EscrowFinish may be submitted (silence is approval).\n- If a dispute is raised, funds remain locked and a human arbitrator is notified - never an automatic release.\n- If the seller fails to deliver within 30 days, the buyer may reclaim the funds via EscrowCancel.\n\nThe controller below pays the seller the moment delivery is confirmed. Fix nextEscrowAction so it enforces all four terms. The platform runs your code against lifecycle scenarios (including hidden boundary cases) and grades the actions it returns.`,
       publicRequirements: {
-        xrplTransactions: ["EscrowCreate", "EscrowFinish", "EscrowCancel"],
-        offChainConditions: ["Seller delivery confirmation", "Buyer dispute (or silence = approval)", "Arbitrator resolution"],
-        timeConstraints: { disputeWindow: "48 hours after delivery confirmation", expiry: "30 days for EscrowCancel eligibility" },
-        liveTestnetContext: "This challenge displays a real XRPL Testnet escrow transaction for reference.",
+        function: 'nextEscrowAction({ deliveryConfirmed, hoursSinceDelivery, disputeOpen, daysSinceCreate }) -> "FINISH" | "CANCEL" | "WAIT" | "ESCALATE"',
+        legalTerms: [
+          "FINISH only after the 48-hour dispute window has closed with no dispute",
+          "ESCALATE (arbitrator) whenever a dispute is open - never release automatically",
+          "CANCEL (refund the buyer) once 30 days pass with no delivery",
+          "WAIT in every other situation",
+        ],
+        note: "Your code runs in a sandbox; it must return one of the four action strings.",
       },
-      starterMaterial: null,
+      starterMaterialType: "js",
+      starterMaterial: `// Escrow release controller: decides the platform's next on-ledger action.
+//
+// LEGAL TERMS (from the signed deal):
+//   1. Buyer has 48 hours after delivery confirmation to dispute.
+//   2. No dispute within 48 hours -> EscrowFinish (silence is approval).
+//   3. Open dispute -> funds stay locked, arbitrator decides. Never auto-release.
+//   4. No delivery within 30 days -> buyer refundable via EscrowCancel.
+//
+// This version pays the seller the moment delivery is confirmed.
+// It passed code review. Fix nextEscrowAction.
+function nextEscrowAction({ deliveryConfirmed, hoursSinceDelivery, disputeOpen, daysSinceCreate }) {
+  if (deliveryConfirmed) return "FINISH"
+  return "WAIT"
+}`,
+      expectedSolution: {
+        kind: "pure-function",
+        entry: "nextEscrowAction",
+        groups: {
+          releaseAfterWindow: [
+            { label: "Delivery confirmed 49h ago, no dispute", input: { deliveryConfirmed: true, hoursSinceDelivery: 49, disputeOpen: false, daysSinceCreate: 3 }, expect: "FINISH" },
+          ],
+          disputeWindowHolds: [
+            { label: "Delivery confirmed 12h ago - window still open", input: { deliveryConfirmed: true, hoursSinceDelivery: 12, disputeOpen: false, daysSinceCreate: 1 }, expect: "WAIT" },
+          ],
+          disputeEscalates: [
+            { label: "Dispute open after delivery - arbitrator, not auto-release", input: { deliveryConfirmed: true, hoursSinceDelivery: 60, disputeOpen: true, daysSinceCreate: 3 }, expect: "ESCALATE" },
+          ],
+          expiryRefund: [
+            { label: "No delivery after 31 days - buyer reclaims funds", input: { deliveryConfirmed: false, hoursSinceDelivery: 0, disputeOpen: false, daysSinceCreate: 31 }, expect: "CANCEL" },
+          ],
+          stillWaiting: [
+            { label: "No delivery yet at day 10 - keep waiting", input: { deliveryConfirmed: false, hoursSinceDelivery: 0, disputeOpen: false, daysSinceCreate: 10 }, expect: "WAIT" },
+          ],
+          windowBoundary: [
+            { label: "Exactly 48h - window closed, release permitted", input: { deliveryConfirmed: true, hoursSinceDelivery: 48, disputeOpen: false, daysSinceCreate: 2 }, expect: "FINISH" },
+            { label: "47h - window still open", input: { deliveryConfirmed: true, hoursSinceDelivery: 47, disputeOpen: false, daysSinceCreate: 2 }, expect: "WAIT" },
+          ],
+        },
+      },
       visibleTests: [
-        { id: "vt1", description: "EscrowCreate used to lock funds", type: "concept", concepts: ["escrowcreate", "escrow create", "create escrow"], weight: 15, isVisible: true },
-        { id: "vt2", description: "EscrowFinish used for successful release", type: "concept", concepts: ["escrowfinish", "escrow finish", "finish escrow"], weight: 15, isVisible: true },
-        { id: "vt3", description: "48-hour dispute window specified", type: "concept", concepts: ["48 hour", "48-hour", "dispute window"], weight: 10, isVisible: true },
+        { id: "vt1", description: "Release is permitted once the dispute window closes", type: "execution", check: "releaseAfterWindow", weight: 15, isVisible: true },
+        { id: "vt2", description: "No release while the 48-hour dispute window is open", type: "execution", check: "disputeWindowHolds", weight: 20, isVisible: true },
+        { id: "vt3", description: "An open dispute escalates to the arbitrator", type: "execution", check: "disputeEscalates", weight: 15, isVisible: true },
       ],
       hiddenTests: [
-        { id: "ht1", description: "EscrowCancel used for expired/disputed escrows", type: "concept", concepts: ["escrowcancel", "escrow cancel", "cancel escrow"], weight: 15, isVisible: false },
-        { id: "ht2", description: "CancelAfter field addressed in escrow creation", type: "concept", concepts: ["cancelafter", "cancel after", "expir"], weight: 10, isVisible: false },
-        { id: "ht3", description: "Off-chain delivery confirmation connected to on-chain release", type: "concept", concepts: ["off-chain", "off chain", "delivery confirm"], weight: 15, isVisible: false },
-        { id: "ht4", description: "Dispute path prevents automatic EscrowFinish", type: "concept", concepts: ["dispute", "block", "prevent", "arbitrat"], weight: 15, isVisible: false },
-        { id: "ht5", description: "Silence after dispute window treated as buyer approval", type: "concept", concepts: ["silence", "no dispute", "expir", "automatically"], weight: 10, isVisible: false },
+        { id: "ht1", description: "Buyer is refundable after 30 days without delivery", type: "execution", check: "expiryRefund", weight: 20, isVisible: false },
+        { id: "ht2", description: "Undelivered escrow inside 30 days keeps waiting", type: "execution", check: "stillWaiting", weight: 10, isVisible: false },
+        { id: "ht3", description: "The 48-hour boundary is handled exactly", type: "execution", check: "windowBoundary", weight: 20, isVisible: false },
       ],
       scoringRubric: { totalWeight: 100, passMark: 60 },
-      modelAnswer: `XRPL ESCROW RELEASE WORKFLOW\n\nSTEP 1 - ESCROW CREATION (EscrowCreate)\nBuyer submits EscrowCreate transaction:\n- Amount: agreed XRP amount\n- Destination: seller's XRPL account address\n- CancelAfter: current Ripple epoch + 2,592,000 seconds (30 days)\n- Condition: optional cryptographic condition (PREIMAGE-SHA-256) for additional security\nResult: Funds locked on ledger; escrow object created\n\nSTEP 2 - OFF-CHAIN DELIVERY\nSeller ships goods / delivers service\nSeller submits delivery confirmation to platform (off-chain)\nPlatform records: delivery_timestamp, confirmation_id\nBuyer receives notification; 48-hour dispute window opens\n\nSTEP 3A - SUCCESSFUL RELEASE (no dispute within 48 hours)\nAfter 48-hour window expires with no dispute:\nEscrowFinish transaction submitted by platform or seller:\n- Owner: buyer's XRPL address\n- OfferSequence: sequence number of the EscrowCreate transaction\nResult: Funds released to seller\n\nSTEP 3B - DISPUTED RELEASE\nBuyer raises dispute within 48 hours:\nEscrowFinish is blocked by platform (off-chain control)\nHuman arbitrator notified\nArbitrator decision: release to seller OR cancel to buyer\nPlatform submits appropriate transaction based on decision\n\nSTEP 3C - EXPIRY REFUND (no delivery within 30 days)\nCancelAfter time reached on ledger:\nBuyer submits EscrowCancel transaction:\n- Owner: buyer's XRPL address\n- OfferSequence: sequence number of EscrowCreate\nResult: Funds returned to buyer\n\nKEY XRPL FIELDS:\n- FinishAfter: earliest time EscrowFinish can be submitted\n- CancelAfter: time after which EscrowCancel becomes valid\n- Condition/Fulfillment: cryptographic condition for additional release control`,
-      explanation: "XRPL escrow uses time-based and cryptographic conditions. The critical design challenge is connecting off-chain legal conditions (delivery confirmation, dispute) to on-chain transaction eligibility.",
-      tags: ["XRPL", "escrow", "EscrowCreate", "EscrowFinish", "EscrowCancel", "payments"],
+      modelAnswer: `function nextEscrowAction({ deliveryConfirmed, hoursSinceDelivery, disputeOpen, daysSinceCreate }) {
+  // Term 3: an open dispute freezes everything - the arbitrator decides.
+  if (disputeOpen) return "ESCALATE"
+
+  if (deliveryConfirmed) {
+    // Terms 1-2: buyer has 48 hours to contest; silence after that is approval.
+    return hoursSinceDelivery >= 48 ? "FINISH" : "WAIT"
+  }
+
+  // Term 4: no delivery within 30 days -> refund path via EscrowCancel.
+  return daysSinceCreate >= 30 ? "CANCEL" : "WAIT"
+}`,
+      explanation: "The buggy controller collapses the whole lifecycle into 'delivered means paid'. That erases the buyer's 48-hour dispute right, routes disputed funds to the seller instead of the arbitrator, and leaves an undelivered escrow locked forever with no refund. The fix orders the checks by legal priority: dispute first (it freezes release), then the dispute window, then the 30-day refund path. On the ledger these map to EscrowFinish, EscrowCancel, or doing nothing - the legal skill is knowing which is lawful when.",
+      tags: ["XRPL", "escrow", "EscrowFinish", "EscrowCancel", "dispute", "executable"],
       isXrplRelated: true,
       requiresXrplTestnet: true,
       xrplTxHash: null,
-      estimatedMinutes: 30,
+      estimatedMinutes: 20,
       maxScore: 100,
     },
     {
-      title: "Modify XRPL Payment Compliance Controls",
+      title: "Fix the XRPL Payment Gate That Only Checks KYC",
       slug: "modify-xrpl-payment-compliance",
       trackId: trackMap["xrpl-compliance"],
       mode: Mode.MODIFY,
       difficulty: Difficulty.INTERMEDIATE,
-      description: "Modify an existing XRPL payment workflow to add sanctions screening, jurisdiction restrictions, and audit logging.",
-      scenario: `A cross-border payments firm is using XRPL for settlement between correspondent banks. Their current workflow allows any XRPL payment if both sender and recipient have completed KYC.\n\nA regulatory review has identified the following required changes:\n- Sanctions screening must occur at the time of each payment (not just at onboarding)\n- Payments to accounts in FATF high-risk jurisdictions must be blocked\n- Payments above $10,000 equivalent must require manual compliance approval before the XRPL transaction is submitted\n- All blocked or reviewed payments must be logged with reason and timestamp\n- Approved payments must include a Memo field on the XRPL transaction with a compliance reference ID`,
+      description: "The payment gate clears any XRPL payment as long as both parties passed KYC at onboarding - no sanctions check at payment time, no jurisdiction block, no threshold review. Fix the code. It is executed against payment scenarios and graded on the decisions it returns.",
+      scenario: `A cross-border payments firm settles between correspondent banks on XRPL. Their gate submits a payment if both sender and recipient completed KYC at onboarding - and checks nothing else.\n\nA regulatory review requires:\n- Sanctions screening at the time of EACH payment, not just onboarding. A screening hit blocks the payment - it cannot be waved through by any approval.\n- Payments to accounts in FATF high-risk jurisdictions must be blocked.\n- Payments of $10,000 or more require manual compliance approval before the XRPL transaction is submitted.\n- Submitted payments must carry the compliance reference ID in the XRPL Memo field for traceability.\n\nFix processPayment so it enforces all of this. The platform runs your code against payment scenarios (including hidden edge cases) and grades the decisions it actually returns.`,
       publicRequirements: {
-        existingWorkflow: "IF sender.kyc_status == APPROVED AND recipient.kyc_status == APPROVED THEN submit_xrpl_payment()",
-        newRequirements: [
-          "Real-time sanctions screening at payment time",
-          "Block payments to FATF high-risk jurisdictions",
-          "Manual review for payments above $10,000",
-          "Audit log for all blocked and reviewed payments",
-          "Compliance reference ID in XRPL Memo field",
+        function: 'processPayment({ senderKycApproved, recipientKycApproved, sanctionsMatch, recipientJurisdiction, highRiskJurisdictions, amountUsd, manualApproval, complianceRef }) -> decision object',
+        decisions: [
+          '{ action: "BLOCK", reason: "KYC_INCOMPLETE" | "SANCTIONS_MATCH" | "HIGH_RISK_JURISDICTION" }',
+          '{ action: "REVIEW", reason: "ABOVE_THRESHOLD" } when $10,000+ and not yet manually approved',
+          '{ action: "SUBMIT", memo: complianceRef } when every check passes',
         ],
+        note: "sanctionsMatch is the real-time screening result for this payment. manualApproval is true only when compliance has already approved this payment.",
       },
-      starterMaterial: "IF sender.kyc_status == APPROVED AND recipient.kyc_status == APPROVED THEN submit_xrpl_payment()",
-      starterMaterialType: "pseudocode",
+      starterMaterialType: "js",
+      starterMaterial: `// XRPL payment gate for correspondent-bank settlement.
+//
+// REGULATORY REQUIREMENTS (from the s.166 review):
+//   1. Sanctions screening at EACH payment - a hit always blocks,
+//      no approval can override it.
+//   2. Block payments to FATF high-risk jurisdictions.
+//   3. $10,000+ requires manual compliance approval before submission.
+//   4. Submitted payments carry the compliance reference in the Memo.
+//
+// This version trusts onboarding KYC and checks nothing else.
+// Fix processPayment.
+function processPayment({ senderKycApproved, recipientKycApproved, complianceRef }) {
+  if (!senderKycApproved || !recipientKycApproved) {
+    return { action: "BLOCK", reason: "KYC_INCOMPLETE" }
+  }
+  return { action: "SUBMIT", memo: complianceRef }
+}`,
+      expectedSolution: {
+        kind: "pure-function",
+        entry: "processPayment",
+        groups: {
+          kycRetained: [
+            { label: "Recipient KYC incomplete", input: { senderKycApproved: true, recipientKycApproved: false, sanctionsMatch: false, recipientJurisdiction: "DE", highRiskJurisdictions: ["IR", "KP", "MM"], amountUsd: 500, manualApproval: false, complianceRef: "REF-1001" }, expect: { action: "BLOCK", reason: "KYC_INCOMPLETE" } },
+          ],
+          sanctionsAtPaymentTime: [
+            { label: "Screening hit at payment time (KYC passed at onboarding)", input: { senderKycApproved: true, recipientKycApproved: true, sanctionsMatch: true, recipientJurisdiction: "DE", highRiskJurisdictions: ["IR", "KP", "MM"], amountUsd: 500, manualApproval: false, complianceRef: "REF-1002" }, expect: { action: "BLOCK", reason: "SANCTIONS_MATCH" } },
+          ],
+          jurisdictionBlock: [
+            { label: "Recipient account in a FATF high-risk jurisdiction", input: { senderKycApproved: true, recipientKycApproved: true, sanctionsMatch: false, recipientJurisdiction: "KP", highRiskJurisdictions: ["IR", "KP", "MM"], amountUsd: 500, manualApproval: false, complianceRef: "REF-1003" }, expect: { action: "BLOCK", reason: "HIGH_RISK_JURISDICTION" } },
+          ],
+          thresholdReview: [
+            { label: "$10,000 exactly, not yet approved", input: { senderKycApproved: true, recipientKycApproved: true, sanctionsMatch: false, recipientJurisdiction: "DE", highRiskJurisdictions: ["IR", "KP", "MM"], amountUsd: 10000, manualApproval: false, complianceRef: "REF-1004" }, expect: { action: "REVIEW", reason: "ABOVE_THRESHOLD" } },
+            { label: "$25,000 with manual approval granted", input: { senderKycApproved: true, recipientKycApproved: true, sanctionsMatch: false, recipientJurisdiction: "DE", highRiskJurisdictions: ["IR", "KP", "MM"], amountUsd: 25000, manualApproval: true, complianceRef: "REF-1005" }, expect: { action: "SUBMIT", memo: "REF-1005" } },
+          ],
+          memoTraceability: [
+            { label: "Clean payment carries the compliance reference", input: { senderKycApproved: true, recipientKycApproved: true, sanctionsMatch: false, recipientJurisdiction: "FR", highRiskJurisdictions: ["IR", "KP", "MM"], amountUsd: 900, manualApproval: false, complianceRef: "REF-1006" }, expect: { action: "SUBMIT", memo: "REF-1006" } },
+          ],
+          approvalCannotOverrideSanctions: [
+            { label: "Sanctions hit with manual approval - must still block", input: { senderKycApproved: true, recipientKycApproved: true, sanctionsMatch: true, recipientJurisdiction: "DE", highRiskJurisdictions: ["IR", "KP", "MM"], amountUsd: 20000, manualApproval: true, complianceRef: "REF-1007" }, expect: { action: "BLOCK", reason: "SANCTIONS_MATCH" } },
+          ],
+        },
+      },
       visibleTests: [
-        { id: "vt1", description: "Real-time sanctions screening added", type: "concept", concepts: ["sanctions", "real-time", "payment time"], weight: 15, isVisible: true },
-        { id: "vt2", description: "FATF high-risk jurisdiction block included", type: "concept", concepts: ["fatf", "high-risk jurisdiction", "jurisdiction"], weight: 15, isVisible: true },
-        { id: "vt3", description: "Manual review for payments above $10,000", type: "concept", concepts: ["10,000", "$10", "manual review"], weight: 10, isVisible: true },
+        { id: "vt1", description: "KYC gate is retained from the original workflow", type: "execution", check: "kycRetained", weight: 15, isVisible: true },
+        { id: "vt2", description: "Sanctions are screened at payment time, not just onboarding", type: "execution", check: "sanctionsAtPaymentTime", weight: 20, isVisible: true },
+        { id: "vt3", description: "FATF high-risk jurisdictions are blocked", type: "execution", check: "jurisdictionBlock", weight: 15, isVisible: true },
       ],
       hiddenTests: [
-        { id: "ht1", description: "Audit log includes reason and timestamp for blocked payments", type: "concept", concepts: ["audit log", "reason", "timestamp"], weight: 15, isVisible: false },
-        { id: "ht2", description: "XRPL Memo field used for compliance reference", type: "concept", concepts: ["memo", "xrpl memo", "reference id"], weight: 20, isVisible: false },
-        { id: "ht3", description: "KYC check retained from original workflow", type: "concept", concepts: ["kyc"], weight: 10, isVisible: false },
-        { id: "ht4", description: "Payment blocked if sanctions match found at payment time (not just onboarding)", type: "concept", concepts: ["payment time", "each payment", "real-time"], weight: 15, isVisible: false },
+        { id: "ht1", description: "$10,000+ payments require manual approval first", type: "execution", check: "thresholdReview", weight: 20, isVisible: false },
+        { id: "ht2", description: "Submitted payments carry the compliance reference in the Memo", type: "execution", check: "memoTraceability", weight: 15, isVisible: false },
+        { id: "ht3", description: "Manual approval cannot override a sanctions hit", type: "execution", check: "approvalCannotOverrideSanctions", weight: 15, isVisible: false },
       ],
       scoringRubric: { totalWeight: 100, passMark: 60 },
-      modelAnswer: `MODIFIED XRPL PAYMENT WORKFLOW\n\nFUNCTION process_xrpl_payment(sender, recipient, amount_usd, xrpl_amount):\n  \n  // Step 1: KYC Check (retained)\n  IF sender.kyc_status != APPROVED OR recipient.kyc_status != APPROVED:\n    block_payment(reason="KYC_INCOMPLETE")\n    audit_log(sender, recipient, amount_usd, "BLOCKED", "KYC_INCOMPLETE", timestamp())\n    RETURN\n  \n  // Step 2: Real-time Sanctions Screening\n  sender_match = sanctions_screen(sender.name, sender.address)\n  recipient_match = sanctions_screen(recipient.name, recipient.address)\n  \n  IF sender_match.score >= 0.85 OR recipient_match.score >= 0.85:\n    block_payment(reason="SANCTIONS_MATCH")\n    audit_log(sender, recipient, amount_usd, "BLOCKED", "SANCTIONS_MATCH", timestamp())\n    RETURN\n  \n  // Step 3: Jurisdiction Check\n  IF recipient.jurisdiction IN fatf_high_risk_list:\n    block_payment(reason="HIGH_RISK_JURISDICTION")\n    audit_log(sender, recipient, amount_usd, "BLOCKED", "HIGH_RISK_JURISDICTION", timestamp())\n    RETURN\n  \n  // Step 4: Threshold Review\n  compliance_ref_id = generate_ref_id()\n  \n  IF amount_usd >= 10000:\n    audit_log(sender, recipient, amount_usd, "PENDING_REVIEW", "ABOVE_THRESHOLD", timestamp())\n    approval = request_manual_review(sender, recipient, amount_usd, compliance_ref_id)\n    IF approval != APPROVED:\n      audit_log(sender, recipient, amount_usd, "BLOCKED", "REVIEW_REJECTED", timestamp())\n      RETURN\n  \n  // Step 5: Submit XRPL Payment with Memo\n  memo = { ComplianceRef: compliance_ref_id, ReviewedAt: timestamp() }\n  submit_xrpl_payment(sender.xrpl_address, recipient.xrpl_address, xrpl_amount, memo)\n  audit_log(sender, recipient, amount_usd, "PROCESSED", compliance_ref_id, timestamp())`,
-      explanation: "The key changes are: real-time sanctions at payment time (not just onboarding), jurisdiction blocking, threshold-based manual review, and XRPL Memo field usage for compliance traceability.",
-      tags: ["XRPL", "compliance", "sanctions", "payments", "AML", "FATF"],
+      modelAnswer: `function processPayment({ senderKycApproved, recipientKycApproved, sanctionsMatch, recipientJurisdiction, highRiskJurisdictions, amountUsd, manualApproval, complianceRef }) {
+  // Retained: both parties must have completed KYC.
+  if (!senderKycApproved || !recipientKycApproved) {
+    return { action: "BLOCK", reason: "KYC_INCOMPLETE" }
+  }
+
+  // Screening runs at EVERY payment - designations change after onboarding,
+  // and no approval can override a hit.
+  if (sanctionsMatch) {
+    return { action: "BLOCK", reason: "SANCTIONS_MATCH" }
+  }
+
+  if (highRiskJurisdictions.includes(recipientJurisdiction)) {
+    return { action: "BLOCK", reason: "HIGH_RISK_JURISDICTION" }
+  }
+
+  // $10,000+ needs a human before anything touches the ledger.
+  if (amountUsd >= 10000 && manualApproval !== true) {
+    return { action: "REVIEW", reason: "ABOVE_THRESHOLD" }
+  }
+
+  // Traceability: the compliance reference travels in the XRPL Memo.
+  return { action: "SUBMIT", memo: complianceRef }
+}`,
+      explanation: "The shipped gate treats onboarding KYC as permanent clearance. Sanctions designations change daily, so screening must run per payment - and the check order matters: a sanctions hit blocks even a manually-approved payment, which is why the sanctions check sits above the threshold logic rather than beside it. The Memo reference is what lets an auditor tie the on-ledger XRPL transaction back to the compliance decision that authorised it.",
+      tags: ["XRPL", "compliance", "sanctions", "payments", "AML", "FATF", "executable"],
+      isXrplRelated: true,
+      requiresXrplTestnet: false,
+      estimatedMinutes: 25,
+      maxScore: 100,
+    },
+    {
+      title: "Fix the Tokenised Bond Transfer Gate That Ignores the Lock-Up",
+      slug: "design-xrpl-token-transfer-restrictions",
+      trackId: trackMap["xrpl-tokenisation"],
+      mode: Mode.MODIFY,
+      difficulty: Difficulty.ADVANCED,
+      description: "The transfer gate for a tokenised corporate bond approves any transfer to an authorised Trust Line - ignoring the 12-month lock-up, KYC, sanctions, jurisdiction limits, and the maturity condition on redemption. Fix the code. It is executed against transfer scenarios and graded on the approvals it actually grants.",
+      scenario: `A UK asset manager issues a tokenised corporate bond on XRPL as an issued currency held via Trust Lines. The issuer has set RequireAuth, so only authorised Trust Lines can hold the token - but everything above that is enforced by the platform's transfer gate, and the gate below approves any transfer to an authorised line.\n\nThe bond terms and regulatory requirements:\n- Transfers are restricted for the first 12 months from issuance (lock-up period, 365 days).\n- The receiving account must hold an authorised Trust Line AND have completed the issuer's KYC.\n- Sanctions screening must pass before any transfer.\n- Accounts in FATF high-risk jurisdictions may not receive the token.\n- Redemption (returning the token to the issuer) is only available after the maturity date - but it is exempt from the lock-up and jurisdiction rules, since it is the contractual exit.\n\nFix approveTransfer. The platform runs your code against transfer and redemption scenarios (including hidden edge cases) and grades the approvals it grants.`,
+      publicRequirements: {
+        function: 'approveTransfer({ kind, daysSinceIssuance, maturityReached, recipientAuthorised, recipientKycComplete, sanctionsMatch, recipientJurisdiction, highRiskJurisdictions }) -> approval object',
+        decisions: [
+          '{ approved: true } when the transfer or redemption is permitted',
+          '{ approved: false, reason: "LOCKUP_ACTIVE" | "TRUST_LINE_NOT_AUTHORISED" | "KYC_INCOMPLETE" | "SANCTIONS_MATCH" | "HIGH_RISK_JURISDICTION" | "NOT_MATURED" } otherwise',
+        ],
+        checkOrder: "TRANSFER: lock-up, then trust line, then KYC, then sanctions, then jurisdiction. REDEMPTION: maturity only.",
+        note: 'kind is "TRANSFER" or "REDEMPTION". The lock-up is 365 days from issuance.',
+      },
+      starterMaterialType: "js",
+      starterMaterial: `// Transfer gate for a tokenised corporate bond on XRPL.
+//
+// BOND TERMS AND REGULATORY REQUIREMENTS:
+//   1. 12-month lock-up (365 days) from issuance - no transfers.
+//   2. Recipient needs an authorised Trust Line AND completed KYC.
+//   3. Sanctions screening must pass before any transfer.
+//   4. FATF high-risk jurisdictions may not receive the token.
+//   5. REDEMPTION (return to issuer) only after maturity - but exempt
+//      from lock-up and jurisdiction rules: it is the contractual exit.
+//
+// This version approves anything sent to an authorised Trust Line.
+// Fix approveTransfer.
+function approveTransfer({ kind, recipientAuthorised }) {
+  if (!recipientAuthorised) {
+    return { approved: false, reason: "TRUST_LINE_NOT_AUTHORISED" }
+  }
+  return { approved: true }
+}`,
+      expectedSolution: {
+        kind: "pure-function",
+        entry: "approveTransfer",
+        groups: {
+          trustLineGate: [
+            { label: "Recipient without an authorised Trust Line", input: { kind: "TRANSFER", daysSinceIssuance: 400, maturityReached: false, recipientAuthorised: false, recipientKycComplete: true, sanctionsMatch: false, recipientJurisdiction: "GB", highRiskJurisdictions: ["IR", "KP"] }, expect: { approved: false, reason: "TRUST_LINE_NOT_AUTHORISED" } },
+          ],
+          lockupEnforced: [
+            { label: "Transfer on day 200 of the 365-day lock-up", input: { kind: "TRANSFER", daysSinceIssuance: 200, maturityReached: false, recipientAuthorised: true, recipientKycComplete: true, sanctionsMatch: false, recipientJurisdiction: "GB", highRiskJurisdictions: ["IR", "KP"] }, expect: { approved: false, reason: "LOCKUP_ACTIVE" } },
+          ],
+          sanctionsGate: [
+            { label: "Sanctions hit on the recipient", input: { kind: "TRANSFER", daysSinceIssuance: 400, maturityReached: false, recipientAuthorised: true, recipientKycComplete: true, sanctionsMatch: true, recipientJurisdiction: "GB", highRiskJurisdictions: ["IR", "KP"] }, expect: { approved: false, reason: "SANCTIONS_MATCH" } },
+          ],
+          kycGate: [
+            { label: "Recipient authorised but KYC incomplete", input: { kind: "TRANSFER", daysSinceIssuance: 400, maturityReached: false, recipientAuthorised: true, recipientKycComplete: false, sanctionsMatch: false, recipientJurisdiction: "GB", highRiskJurisdictions: ["IR", "KP"] }, expect: { approved: false, reason: "KYC_INCOMPLETE" } },
+          ],
+          jurisdictionGate: [
+            { label: "Recipient in a FATF high-risk jurisdiction", input: { kind: "TRANSFER", daysSinceIssuance: 400, maturityReached: false, recipientAuthorised: true, recipientKycComplete: true, sanctionsMatch: false, recipientJurisdiction: "KP", highRiskJurisdictions: ["IR", "KP"] }, expect: { approved: false, reason: "HIGH_RISK_JURISDICTION" } },
+            { label: "Clean post-lock-up transfer approved", input: { kind: "TRANSFER", daysSinceIssuance: 400, maturityReached: false, recipientAuthorised: true, recipientKycComplete: true, sanctionsMatch: false, recipientJurisdiction: "GB", highRiskJurisdictions: ["IR", "KP"] }, expect: { approved: true } },
+          ],
+          redemptionMaturity: [
+            { label: "Redemption before maturity", input: { kind: "REDEMPTION", daysSinceIssuance: 200, maturityReached: false, recipientAuthorised: true, recipientKycComplete: true, sanctionsMatch: false, recipientJurisdiction: "GB", highRiskJurisdictions: ["IR", "KP"] }, expect: { approved: false, reason: "NOT_MATURED" } },
+            { label: "Redemption after maturity (lock-up exemption applies)", input: { kind: "REDEMPTION", daysSinceIssuance: 200, maturityReached: true, recipientAuthorised: true, recipientKycComplete: true, sanctionsMatch: false, recipientJurisdiction: "GB", highRiskJurisdictions: ["IR", "KP"] }, expect: { approved: true } },
+          ],
+          lockupBoundary: [
+            { label: "Day 365 exactly - lock-up has ended", input: { kind: "TRANSFER", daysSinceIssuance: 365, maturityReached: false, recipientAuthorised: true, recipientKycComplete: true, sanctionsMatch: false, recipientJurisdiction: "GB", highRiskJurisdictions: ["IR", "KP"] }, expect: { approved: true } },
+            { label: "Day 364 - still locked", input: { kind: "TRANSFER", daysSinceIssuance: 364, maturityReached: false, recipientAuthorised: true, recipientKycComplete: true, sanctionsMatch: false, recipientJurisdiction: "GB", highRiskJurisdictions: ["IR", "KP"] }, expect: { approved: false, reason: "LOCKUP_ACTIVE" } },
+          ],
+        },
+      },
+      visibleTests: [
+        { id: "vt1", description: "Unauthorised Trust Lines are rejected", type: "execution", check: "trustLineGate", weight: 10, isVisible: true },
+        { id: "vt2", description: "The 12-month lock-up blocks early transfers", type: "execution", check: "lockupEnforced", weight: 20, isVisible: true },
+        { id: "vt3", description: "Sanctions screening gates every transfer", type: "execution", check: "sanctionsGate", weight: 15, isVisible: true },
+      ],
+      hiddenTests: [
+        { id: "ht1", description: "Receiving accounts must have completed issuer KYC", type: "execution", check: "kycGate", weight: 15, isVisible: false },
+        { id: "ht2", description: "FATF high-risk jurisdictions cannot receive the token", type: "execution", check: "jurisdictionGate", weight: 15, isVisible: false },
+        { id: "ht3", description: "Redemption is only available after maturity", type: "execution", check: "redemptionMaturity", weight: 15, isVisible: false },
+        { id: "ht4", description: "The lock-up boundary lands exactly on day 365", type: "execution", check: "lockupBoundary", weight: 10, isVisible: false },
+      ],
+      scoringRubric: { totalWeight: 100, passMark: 65 },
+      modelAnswer: `function approveTransfer({ kind, daysSinceIssuance, maturityReached, recipientAuthorised, recipientKycComplete, sanctionsMatch, recipientJurisdiction, highRiskJurisdictions }) {
+  // Redemption is the contractual exit: only the maturity condition applies.
+  if (kind === "REDEMPTION") {
+    return maturityReached ? { approved: true } : { approved: false, reason: "NOT_MATURED" }
+  }
+
+  // 12-month lock-up: no secondary transfers for 365 days from issuance.
+  if (daysSinceIssuance < 365) {
+    return { approved: false, reason: "LOCKUP_ACTIVE" }
+  }
+
+  // RequireAuth handles this on-ledger; the gate must agree with the ledger.
+  if (!recipientAuthorised) {
+    return { approved: false, reason: "TRUST_LINE_NOT_AUTHORISED" }
+  }
+
+  if (!recipientKycComplete) {
+    return { approved: false, reason: "KYC_INCOMPLETE" }
+  }
+
+  if (sanctionsMatch) {
+    return { approved: false, reason: "SANCTIONS_MATCH" }
+  }
+
+  if (highRiskJurisdictions.includes(recipientJurisdiction)) {
+    return { approved: false, reason: "HIGH_RISK_JURISDICTION" }
+  }
+
+  return { approved: true }
+}`,
+      explanation: "XRPL's RequireAuth flag controls who can hold the token, but everything above that - lock-up, KYC, sanctions, jurisdiction - is platform-enforced, and the buggy gate enforced none of it. The subtleties the hidden tests catch: redemption is exempt from the lock-up (it is the contractual exit, and blocking it would trap investors), but strictly gated on maturity; and 'restricted for the first 12 months' means day 365 is the first tradable day. Getting the exemption wrong in either direction is a real drafting-to-code failure mode.",
+      tags: ["XRPL", "tokenisation", "trust-lines", "bonds", "transfer-restrictions", "RequireAuth", "executable"],
+      isXrplRelated: true,
+      requiresXrplTestnet: false,
+      estimatedMinutes: 35,
+      maxScore: 100,
+    },
+    {
+      title: "Fix the Travel Rule Memo That Over-Shares Personal Data",
+      slug: "design-xrpl-crossborder-payment-compliance",
+      trackId: trackMap["xrpl-payments"],
+      mode: Mode.MODIFY,
+      difficulty: Difficulty.INTERMEDIATE,
+      description: "The remittance memo builder attaches the sender's full personal data to every XRPL payment - 'better safe than sorry'. That is a data-protection breach below the Travel Rule threshold. Fix the code. It is executed against corridor payments and graded on the memo it actually builds.",
+      scenario: `A fintech runs a GBP → XRP → KES remittance corridor: a UK sending institution settles over XRPL to a Kenyan receiving institution. Each XRPL payment carries a compliance memo.\n\nThe rules the memo must encode:\n- Travel Rule: for payments ABOVE £1,000, full originator information (name, account, address, date of birth) and beneficiary information (name, account) must travel with the payment.\n- Data minimisation: AT OR BELOW £1,000, only an originator account reference may be attached. Shipping full personal data on a public ledger when the law does not require it is a data-protection breach - the memo is visible to everyone, forever.\n- Every memo carries the corridor identifier and the compliance reference.\n\nThe builder below attaches everything to every payment. Compliance called it "being thorough". The DPO calls it a reportable incident. Fix buildRemittanceMemo. The platform runs your code against corridor payments (including hidden boundary cases) and grades the memo it returns.`,
+      publicRequirements: {
+        function: "buildRemittanceMemo({ amountGbp, complianceRef, originator, beneficiary }) -> memo object",
+        memoShapes: [
+          'Above £1,000: { corridor: "GBP-KES", complianceRef, travelRule: { originator: { name, account, address, dateOfBirth }, beneficiary: { name, account } } }',
+          'At or below £1,000: { corridor: "GBP-KES", complianceRef, travelRule: { originatorRef: originator.account } }',
+        ],
+        note: "The threshold is strictly above £1,000 - a £1,000 payment takes the minimised form.",
+      },
+      starterMaterialType: "js",
+      starterMaterial: `// Compliance memo builder for the GBP -> XRP -> KES corridor.
+//
+// RULES:
+//   1. Travel Rule (above £1,000): full originator (name, account,
+//      address, dateOfBirth) + beneficiary (name, account) travel
+//      with the payment.
+//   2. Data minimisation (at or below £1,000): originator account
+//      reference ONLY. XRPL memos are public forever - personal data
+//      the law does not require is a data-protection breach.
+//   3. Every memo: corridor "GBP-KES" + the compliance reference.
+//
+// This version sends everything on every payment - "better safe
+// than sorry". The DPO disagrees. Fix buildRemittanceMemo.
+function buildRemittanceMemo({ amountGbp, complianceRef, originator, beneficiary }) {
+  return {
+    corridor: "GBP-KES",
+    complianceRef,
+    travelRule: {
+      originator: { name: originator.name, account: originator.account, address: originator.address, dateOfBirth: originator.dateOfBirth },
+      beneficiary: { name: beneficiary.name, account: beneficiary.account },
+    },
+  }
+}`,
+      expectedSolution: {
+        kind: "pure-function",
+        entry: "buildRemittanceMemo",
+        groups: {
+          aboveThresholdComplete: [
+            { label: "£2,500 payment carries full Travel Rule data", input: { amountGbp: 2500, complianceRef: "REM-4001", originator: { name: "Amina Otieno", account: "GB29NWBK60161331926819", address: "14 Harbour Rd, London", dateOfBirth: "1988-03-14" }, beneficiary: { name: "Joseph Otieno", account: "KE-EQTY-009912" } }, expect: { corridor: "GBP-KES", complianceRef: "REM-4001", travelRule: { originator: { name: "Amina Otieno", account: "GB29NWBK60161331926819", address: "14 Harbour Rd, London", dateOfBirth: "1988-03-14" }, beneficiary: { name: "Joseph Otieno", account: "KE-EQTY-009912" } } } },
+          ],
+          belowThresholdMinimised: [
+            { label: "£400 payment must carry the account reference only", input: { amountGbp: 400, complianceRef: "REM-4002", originator: { name: "Amina Otieno", account: "GB29NWBK60161331926819", address: "14 Harbour Rd, London", dateOfBirth: "1988-03-14" }, beneficiary: { name: "Joseph Otieno", account: "KE-EQTY-009912" } }, expect: { corridor: "GBP-KES", complianceRef: "REM-4002", travelRule: { originatorRef: "GB29NWBK60161331926819" } } },
+          ],
+          corridorAndRef: [
+            { label: "Corridor and compliance reference always present", input: { amountGbp: 1500, complianceRef: "REM-4003", originator: { name: "Amina Otieno", account: "GB29NWBK60161331926819", address: "14 Harbour Rd, London", dateOfBirth: "1988-03-14" }, beneficiary: { name: "Joseph Otieno", account: "KE-EQTY-009912" } }, expect: { corridor: "GBP-KES", complianceRef: "REM-4003" }, mode: "subset" },
+          ],
+          thresholdBoundary: [
+            { label: "£1,000 exactly is NOT above the threshold - minimised form", input: { amountGbp: 1000, complianceRef: "REM-4004", originator: { name: "Amina Otieno", account: "GB29NWBK60161331926819", address: "14 Harbour Rd, London", dateOfBirth: "1988-03-14" }, beneficiary: { name: "Joseph Otieno", account: "KE-EQTY-009912" } }, expect: { corridor: "GBP-KES", complianceRef: "REM-4004", travelRule: { originatorRef: "GB29NWBK60161331926819" } } },
+            { label: "£1,000.01 crosses the threshold - full data", input: { amountGbp: 1000.01, complianceRef: "REM-4005", originator: { name: "Amina Otieno", account: "GB29NWBK60161331926819", address: "14 Harbour Rd, London", dateOfBirth: "1988-03-14" }, beneficiary: { name: "Joseph Otieno", account: "KE-EQTY-009912" } }, expect: { corridor: "GBP-KES", complianceRef: "REM-4005", travelRule: { originator: { name: "Amina Otieno", account: "GB29NWBK60161331926819", address: "14 Harbour Rd, London", dateOfBirth: "1988-03-14" }, beneficiary: { name: "Joseph Otieno", account: "KE-EQTY-009912" } } } },
+          ],
+          beneficiaryIncluded: [
+            { label: "£5,000 payment includes beneficiary name and account", input: { amountGbp: 5000, complianceRef: "REM-4006", originator: { name: "Amina Otieno", account: "GB29NWBK60161331926819", address: "14 Harbour Rd, London", dateOfBirth: "1988-03-14" }, beneficiary: { name: "Joseph Otieno", account: "KE-EQTY-009912" } }, expect: { corridor: "GBP-KES", complianceRef: "REM-4006", travelRule: { originator: { name: "Amina Otieno", account: "GB29NWBK60161331926819", address: "14 Harbour Rd, London", dateOfBirth: "1988-03-14" }, beneficiary: { name: "Joseph Otieno", account: "KE-EQTY-009912" } } } },
+          ],
+          minimisationHolds: [
+            { label: "£999.99 payment stays minimised", input: { amountGbp: 999.99, complianceRef: "REM-4007", originator: { name: "Amina Otieno", account: "GB29NWBK60161331926819", address: "14 Harbour Rd, London", dateOfBirth: "1988-03-14" }, beneficiary: { name: "Joseph Otieno", account: "KE-EQTY-009912" } }, expect: { corridor: "GBP-KES", complianceRef: "REM-4007", travelRule: { originatorRef: "GB29NWBK60161331926819" } } },
+          ],
+        },
+      },
+      visibleTests: [
+        { id: "vt1", description: "Above £1,000 the full Travel Rule data travels with the payment", type: "execution", check: "aboveThresholdComplete", weight: 20, isVisible: true },
+        { id: "vt2", description: "At or below £1,000 only the originator reference is attached", type: "execution", check: "belowThresholdMinimised", weight: 25, isVisible: true },
+        { id: "vt3", description: "Corridor identifier and compliance reference are always present", type: "execution", check: "corridorAndRef", weight: 10, isVisible: true },
+      ],
+      hiddenTests: [
+        { id: "ht1", description: "The £1,000 boundary is handled exactly (strictly above)", type: "execution", check: "thresholdBoundary", weight: 25, isVisible: false },
+        { id: "ht2", description: "Beneficiary information is complete above the threshold", type: "execution", check: "beneficiaryIncluded", weight: 10, isVisible: false },
+        { id: "ht3", description: "Data minimisation holds just under the threshold", type: "execution", check: "minimisationHolds", weight: 10, isVisible: false },
+      ],
+      scoringRubric: { totalWeight: 100, passMark: 60 },
+      modelAnswer: `function buildRemittanceMemo({ amountGbp, complianceRef, originator, beneficiary }) {
+  const base = { corridor: "GBP-KES", complianceRef }
+
+  // Travel Rule applies strictly ABOVE £1,000.
+  if (amountGbp > 1000) {
+    return {
+      ...base,
+      travelRule: {
+        originator: { name: originator.name, account: originator.account, address: originator.address, dateOfBirth: originator.dateOfBirth },
+        beneficiary: { name: beneficiary.name, account: beneficiary.account },
+      },
+    }
+  }
+
+  // At or below the threshold: data minimisation. XRPL memos are public
+  // forever - only the account reference the rule requires goes on-chain.
+  return { ...base, travelRule: { originatorRef: originator.account } }
+}`,
+      explanation: "The buggy builder fails in the direction engineers rarely consider: over-compliance. Above £1,000 the Travel Rule genuinely requires full originator and beneficiary data to travel with the payment - but below it, writing a customer's name, address, and date of birth into a public, permanent XRPL memo is a data-protection breach, not diligence. The fix is one threshold check that switches between the full IVMS-style payload and a minimised reference - and the hidden boundary tests check that 'above £1,000' means strictly above. Knowing what data must travel AND what data must not is the actual compliance skill.",
+      tags: ["XRPL", "payments", "remittance", "cross-border", "travel-rule", "data-protection", "executable"],
       isXrplRelated: true,
       requiresXrplTestnet: false,
       estimatedMinutes: 30,
       maxScore: 100,
     },
     {
-      title: "Design XRPL Token Transfer Restrictions",
-      slug: "design-xrpl-token-transfer-restrictions",
-      trackId: trackMap["xrpl-tokenisation"],
-      mode: Mode.MODIFY,
-      difficulty: Difficulty.ADVANCED,
-      description: "Modify an existing tokenised bond implementation to add investor eligibility, lock-up periods, sanctions screening, and redemption logic.",
-      scenario: `A UK asset manager is issuing a tokenised corporate bond on the XRPL. The bond is represented as an issued currency (IOU) via XRPL Trust Lines.\n\nThe current implementation allows any XRPL account with an established Trust Line to hold and transfer the token.\n\nNew regulatory and commercial requirements must be implemented:\n- Only FCA-authorised or institutional investors may hold the token\n- Transfers are restricted for the first 12 months from issuance (lock-up period)\n- Sanctions screening must pass before any transfer is permitted\n- The token may only be transferred to accounts that have completed the issuer's KYC process\n- Redemption must be available to all eligible holders after the maturity date\n- Jurisdiction restrictions apply: accounts in FATF high-risk jurisdictions may not hold the token`,
-      publicRequirements: {
-        existingImplementation: "Any XRPL account that sets a Trust Line to the issuer may hold and transfer the token",
-        xrplMechanisms: ["Issued Currency (IOU)", "Trust Lines", "Offers (DEX)", "Transfer Fee", "Require Auth flag"],
-        newRequirements: [
-          "Investor eligibility: FCA-authorised or institutional only",
-          "12-month lock-up from issuance date",
-          "Sanctions screening before transfer",
-          "KYC required for receiving accounts",
-          "Redemption after maturity date",
-          "FATF jurisdiction restriction",
-        ],
-      },
-      starterMaterial: "Any XRPL account that sets a Trust Line to the issuer may hold and transfer the token",
-      starterMaterialType: "workflow",
-      visibleTests: [
-        { id: "vt1", description: "Investor eligibility check included (FCA/institutional)", type: "concept", concepts: ["eligible", "fca", "institutional", "authorised"], weight: 10, isVisible: true },
-        { id: "vt2", description: "12-month lock-up period specified", type: "concept", concepts: ["12 month", "lock-up", "lockup", "lock up"], weight: 10, isVisible: true },
-        { id: "vt3", description: "Sanctions screening before transfer", type: "concept", concepts: ["sanctions", "screening"], weight: 10, isVisible: true },
-      ],
-      hiddenTests: [
-        { id: "ht1", description: "XRPL Require Auth flag used to control Trust Line establishment", type: "concept", concepts: ["require auth", "requireauth", "auth"], weight: 15, isVisible: false },
-        { id: "ht2", description: "Redemption pathway specified after maturity date", type: "concept", concepts: ["redemption", "redeem", "maturity"], weight: 15, isVisible: false },
-        { id: "ht3", description: "FATF jurisdiction restriction applied", type: "concept", concepts: ["fatf", "jurisdiction", "restricted"], weight: 15, isVisible: false },
-        { id: "ht4", description: "KYC check required for receiving account before transfer", type: "concept", concepts: ["kyc", "receiving", "recipient"], weight: 10, isVisible: false },
-        { id: "ht5", description: "Lock-up period prevents DEX trading of the token during restriction period", type: "concept", concepts: ["dex", "trading", "offer", "restrict"], weight: 15, isVisible: false },
-      ],
-      scoringRubric: { totalWeight: 100, passMark: 65 },
-      modelAnswer: `XRPL TOKENISED BOND - TRANSFER RESTRICTION IMPLEMENTATION\n\nXRPL CONFIGURATION:\n1. Issuer sets RequireAuth flag on issuing account\n   → Prevents any account from establishing a Trust Line without issuer authorisation\n   → All Trust Lines must be explicitly authorised by the issuer\n\n2. Issuer authorises Trust Lines only after off-chain verification:\n   - Investor eligibility confirmed (FCA-authorised or institutional classification)\n   - KYC completed with issuer's compliance team\n   - Jurisdiction check passed (not on FATF high-risk list)\n   - Sanctions screening cleared\n\nTRANSFER CONTROL LOGIC (off-chain, platform-enforced):\nFUNCTION approve_transfer(sender, recipient, amount, transfer_date):\n  \n  // Lock-up check\n  IF transfer_date < issuance_date + 365 days:\n    REJECT "Transfer restricted during 12-month lock-up period"\n  \n  // Recipient eligibility\n  IF NOT recipient.trust_line_authorised:\n    REJECT "Recipient does not have an authorised Trust Line"\n  \n  IF NOT recipient.kyc_complete:\n    REJECT "Recipient KYC not completed"\n  \n  // Sanctions screening\n  IF sanctions_screen(sender) OR sanctions_screen(recipient):\n    REJECT "Sanctions match - transfer blocked"\n  \n  // Jurisdiction check\n  IF recipient.jurisdiction IN fatf_high_risk_list:\n    REJECT "Jurisdiction restriction applies"\n  \n  APPROVE transfer\n\nREDEMPTION (after maturity date):\nFUNCTION process_redemption(holder, amount):\n  IF current_date < maturity_date:\n    REJECT "Bond has not yet matured"\n  IF NOT holder.trust_line_authorised:\n    REJECT "Not an eligible holder"\n  // Issuer sends fiat/cash equivalent off-chain\n  // Holder burns token by sending back to issuer account\n  submit_xrpl_payment(holder.address, issuer.address, amount)\n\nNOTE ON DEX RESTRICTION:\nDuring lock-up period, platform must ensure no Offers are created for the token on XRPL DEX. This requires either off-chain monitoring and cancellation, or use of platform-controlled accounts.`,
-      explanation: "XRPL's RequireAuth flag is the key mechanism for restricting who can hold an issued currency. Transfer restrictions above that require off-chain enforcement because XRPL itself does not have programmable transfer conditions beyond basic flags.",
-      tags: ["XRPL", "tokenisation", "trust-lines", "bonds", "transfer-restrictions", "RequireAuth"],
-      isXrplRelated: true,
-      requiresXrplTestnet: false,
-      estimatedMinutes: 40,
-      maxScore: 100,
-    },
-    {
-      title: "Design XRPL Cross-Border Payment Compliance",
-      slug: "design-xrpl-crossborder-payment-compliance",
-      trackId: trackMap["xrpl-payments"],
-      mode: Mode.BUILD,
-      difficulty: Difficulty.INTERMEDIATE,
-      description: "Design a compliance framework for a cross-border XRPL remittance corridor between the UK and Kenya.",
-      scenario: `A fintech company is building a remittance service using the XRP Ledger as the settlement layer between a UK sending institution and a Kenyan receiving institution. The service targets migrant workers sending money home.\n\nXRP is used as a bridge currency. The corridor is: GBP (UK) → XRP (XRPL settlement) → KES (Kenya).\n\nYou must design the compliance framework covering:\n- Sender verification in the UK\n- XRPL transaction requirements\n- Recipient verification in Kenya\n- Travel Rule compliance\n- AML monitoring requirements\n- What happens when a transaction is flagged`,
-      publicRequirements: {
-        corridor: "GBP (UK) → XRP (XRPL) → KES (Kenya)",
-        regulators: ["FCA (UK sending side)", "CBK - Central Bank of Kenya (receiving side)"],
-        travelRuleThreshold: "£1,000 / equivalent",
-        requirements: [
-          "UK sender KYC",
-          "XRPL transaction compliance fields",
-          "Kenya recipient KYC (via local partner)",
-          "Travel Rule: originator and beneficiary information for transactions above threshold",
-          "Ongoing transaction monitoring",
-          "SAR (Suspicious Activity Report) process",
-        ],
-      },
-      starterMaterial: null,
-      visibleTests: [
-        { id: "vt1", description: "UK sender KYC requirements defined", type: "concept", concepts: ["sender", "kyc", "uk"], weight: 10, isVisible: true },
-        { id: "vt2", description: "Travel Rule compliance addressed", type: "concept", concepts: ["travel rule", "originator", "beneficiary"], weight: 15, isVisible: true },
-        { id: "vt3", description: "XRPL Memo field used for compliance data", type: "concept", concepts: ["memo", "xrpl"], weight: 10, isVisible: true },
-      ],
-      hiddenTests: [
-        { id: "ht1", description: "£1,000 threshold specified for Travel Rule", type: "concept", concepts: ["1,000", "£1,000", "threshold"], weight: 10, isVisible: false },
-        { id: "ht2", description: "Kenya recipient KYC via local partner addressed", type: "concept", concepts: ["kenya", "recipient", "local partner", "cbk"], weight: 15, isVisible: false },
-        { id: "ht3", description: "SAR process defined for flagged transactions", type: "concept", concepts: ["sar", "suspicious activity", "report", "mlro"], weight: 15, isVisible: false },
-        { id: "ht4", description: "Ongoing transaction monitoring specified", type: "concept", concepts: ["transaction monitoring", "ongoing monitoring"], weight: 15, isVisible: false },
-        { id: "ht5", description: "XRP bridge currency role explained in compliance context", type: "concept", concepts: ["bridge", "xrp", "settlement"], weight: 10, isVisible: false },
-      ],
-      scoringRubric: { totalWeight: 100, passMark: 60 },
-      modelAnswer: `XRPL REMITTANCE COMPLIANCE FRAMEWORK - GBP/KES CORRIDOR\n\nUK SENDER ONBOARDING (FCA-regulated):\n- Full KYC: identity document + proof of address\n- Sanctions screening: HMT + OFAC consolidated lists\n- PEP screening\n- Source of funds for transfers above £10,000\n- Ongoing monitoring: transaction pattern analysis\n\nXRPL TRANSACTION REQUIREMENTS:\n- Each XRPL payment includes a Memo field containing:\n  { originator: { name, account, reference }, beneficiary: { name, account }, compliance_ref_id, corridor: "GBP-KES" }\n- For transactions above £1,000: full Travel Rule data included in Memo or transmitted to receiving institution via secure channel (IVMS101 format)\n- Sanctions screening of both XRPL addresses before transaction submission\n\nTRAVEL RULE (above £1,000 threshold):\n- Originator information: full name, account number, address, date of birth\n- Beneficiary information: full name, account number\n- Transmitted to Kenyan receiving institution before or concurrent with XRPL settlement\n- Below £1,000: originator account reference only\n\nKENYA RECEIVING SIDE (CBK-regulated, via local partner):\n- Local partner conducts recipient KYC under CBK requirements\n- Recipient eligibility confirmed before funds disbursed in KES\n- Local partner responsible for last-mile compliance\n\nTRANSACTION MONITORING:\n- Automated rules: velocity limits, unusual amounts, dormant account activity\n- High-risk flags: transactions to high-risk jurisdictions, structuring patterns\n- Flagged transactions: held for MLRO review before XRPL submission\n\nSAR PROCESS:\n- MLRO reviews flagged transactions within 24 hours\n- Decision: proceed / block / report to NCA\n- SAR submitted to NCA if reasonable grounds for suspicion\n- Tipping off: customer not informed if SAR submitted`,
-      explanation: "Cross-border XRPL payments must satisfy the regulatory requirements of both jurisdictions. The XRPL Memo field is the practical mechanism for Travel Rule compliance when carrying compliance metadata on-chain.",
-      tags: ["XRPL", "payments", "remittance", "cross-border", "travel-rule", "AML", "FCA"],
-      isXrplRelated: true,
-      requiresXrplTestnet: false,
-      estimatedMinutes: 35,
-      maxScore: 100,
-    },
-    {
-      title: "Build an XRPL KYC-Gated Identity Workflow",
+      title: "Fix the On-Ledger Credential That Leaks Personal Data",
       slug: "build-xrpl-kyc-gated-identity-workflow",
       trackId: trackMap["xrpl-identity"],
-      mode: Mode.BUILD,
+      mode: Mode.MODIFY,
       difficulty: Difficulty.ADVANCED,
-      description: "Design a reusable digital identity workflow that gates access to a regulated XRPL product using on-ledger credentials, without putting personal data on the ledger.",
-      scenario: `A regulated digital asset platform issues a tokenised money-market fund on the XRP Ledger. Only KYC-verified, eligible investors may receive or hold the token.\n\nRather than maintain a centralised whitelist, the platform wants to use XRPL-native identity primitives so a verified investor can prove eligibility across multiple products. You will design the end-to-end workflow.\n\nThe design must cover:\n- How a verified credential is issued to an investor after KYC\n- How eligibility is checked on-ledger before access is granted\n- How personal data is kept off the ledger for privacy\n- What happens when KYC lapses, expires, or a sanctions hit occurs\n- How access is technically enforced on the XRPL account`,
+      description: "The KYC credential builder writes the investor's name, date of birth, and passport number onto the XRP Ledger - public, permanent, unerasable - and never expires the credential. Fix the code. It is executed and graded on the credential object it actually builds.",
+      scenario: `A regulated platform issues a tokenised money-market fund on XRPL. Only KYC-verified investors may hold it, so after KYC the platform's trusted issuer writes a credential to the investor's account using the XRPL Credentials feature. Holding a valid credential is what gates access.\n\nThe rules the credential must satisfy:\n- The ledger is public and permanent: NO personal data may appear in the credential. Identity evidence is referenced by its hash - the PII itself stays off-ledger.\n- Credentials must lapse with KYC: an Expiration must be set to the KYC date plus the validity period, so a stale KYC cannot keep granting access.\n- The credential must bind the right parties: subject account, issuer account, and the credential type "KYC".\n\nThe builder below "keeps everything the checker might need" - name, date of birth, passport number - directly in the on-ledger object, and never expires. That is a GDPR erasure-right problem no one can ever fix, because nothing can be deleted from the ledger.\n\nFix buildKycCredential. The platform runs your code and grades the credential object it returns - including checking what must NOT be in it.`,
       publicRequirements: {
-        xrplMechanisms: ["Decentralized Identifier (DID)", "Verifiable Credential", "DepositAuth", "Credential acceptance"],
-        requirements: [
-          "Trusted issuer grants a credential after KYC",
-          "On-ledger eligibility check before transacting",
-          "No personal data (PII) stored on the ledger",
-          "Credential expiry and renewal",
-          "Revocation on lapsed KYC or sanctions match",
-          "Access enforced at the XRPL account level",
+        function: "buildKycCredential({ subjectAccount, issuerAccount, kycPassedAt, validityDays, evidenceHash, fullName, dateOfBirth, passportNumber }) -> credential object",
+        credentialShape: '{ CredentialType: "KYC", Subject: subjectAccount, Issuer: issuerAccount, EvidenceHash: evidenceHash, Expiration: kycPassedAt + validityDays * 86400 }',
+        rules: [
+          "No PII fields on the ledger - the evidence hash is the only identity reference",
+          "Expiration is kycPassedAt plus validityDays, in seconds",
+          "The PII inputs are provided precisely so you can be tempted - leave them out",
         ],
+        note: "Your code runs in a sandbox; it must return the credential object.",
       },
-      starterMaterial: null,
+      starterMaterialType: "js",
+      starterMaterial: `// Builds the on-ledger KYC credential for a verified investor.
+//
+// RULES:
+//   1. The ledger is PUBLIC and PERMANENT - no personal data in the
+//      credential. Identity evidence is referenced by hash only.
+//   2. Credentials lapse with KYC: Expiration = kycPassedAt +
+//      validityDays * 86400 (seconds).
+//   3. Bind the parties: Subject, Issuer, CredentialType "KYC".
+//
+// This version keeps "everything the checker might need" on-ledger
+// and never expires. The DPO has opened an incident.
+// Fix buildKycCredential.
+function buildKycCredential({ subjectAccount, issuerAccount, kycPassedAt, validityDays, evidenceHash, fullName, dateOfBirth, passportNumber }) {
+  return {
+    CredentialType: "KYC",
+    Subject: subjectAccount,
+    Issuer: issuerAccount,
+    fullName,
+    dateOfBirth,
+    passportNumber,
+    EvidenceHash: evidenceHash,
+  }
+}`,
+      expectedSolution: {
+        kind: "pure-function",
+        entry: "buildKycCredential",
+        groups: {
+          credentialCore: [
+            { label: "Credential binds subject, issuer, and type", input: { subjectAccount: "rInvestor9fBqW46yhV6DqhqawqrT2Ana", issuerAccount: "rIssuerTrustHnPZDzXn9wJv9NdSPKcVE", kycPassedAt: 1750000000, validityDays: 365, evidenceHash: "9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08", fullName: "Amara Diallo", dateOfBirth: "1990-07-22", passportNumber: "GBR-552019331" }, expect: { CredentialType: "KYC", Subject: "rInvestor9fBqW46yhV6DqhqawqrT2Ana", Issuer: "rIssuerTrustHnPZDzXn9wJv9NdSPKcVE" }, mode: "subset" },
+          ],
+          expirySet: [
+            { label: "365-day validity expires exactly on time", input: { subjectAccount: "rInvestor9fBqW46yhV6DqhqawqrT2Ana", issuerAccount: "rIssuerTrustHnPZDzXn9wJv9NdSPKcVE", kycPassedAt: 1750000000, validityDays: 365, evidenceHash: "9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08", fullName: "Amara Diallo", dateOfBirth: "1990-07-22", passportNumber: "GBR-552019331" }, expect: { Expiration: 1781536000 }, mode: "subset" },
+          ],
+          noPiiOnLedger: [
+            { label: "No personal data appears in the on-ledger object", input: { subjectAccount: "rInvestor9fBqW46yhV6DqhqawqrT2Ana", issuerAccount: "rIssuerTrustHnPZDzXn9wJv9NdSPKcVE", kycPassedAt: 1750000000, validityDays: 365, evidenceHash: "9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08", fullName: "Amara Diallo", dateOfBirth: "1990-07-22", passportNumber: "GBR-552019331" }, expect: {}, mode: "subset", forbidKeys: ["fullName", "dateOfBirth", "passportNumber"] },
+          ],
+          hashReference: [
+            { label: "Identity evidence referenced by hash", input: { subjectAccount: "rInvestor9fBqW46yhV6DqhqawqrT2Ana", issuerAccount: "rIssuerTrustHnPZDzXn9wJv9NdSPKcVE", kycPassedAt: 1750000000, validityDays: 365, evidenceHash: "9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08", fullName: "Amara Diallo", dateOfBirth: "1990-07-22", passportNumber: "GBR-552019331" }, expect: { EvidenceHash: "9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08" }, mode: "subset" },
+          ],
+          renewalWindow: [
+            { label: "90-day validity computes its own expiry", input: { subjectAccount: "rInvestor9fBqW46yhV6DqhqawqrT2Ana", issuerAccount: "rIssuerTrustHnPZDzXn9wJv9NdSPKcVE", kycPassedAt: 1750000000, validityDays: 90, evidenceHash: "9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08", fullName: "Amara Diallo", dateOfBirth: "1990-07-22", passportNumber: "GBR-552019331" }, expect: { Expiration: 1757776000 }, mode: "subset" },
+          ],
+          noPiiVariants: [
+            { label: "PII does not reappear under other field names", input: { subjectAccount: "rInvestor9fBqW46yhV6DqhqawqrT2Ana", issuerAccount: "rIssuerTrustHnPZDzXn9wJv9NdSPKcVE", kycPassedAt: 1750000000, validityDays: 365, evidenceHash: "9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08", fullName: "Amara Diallo", dateOfBirth: "1990-07-22", passportNumber: "GBR-552019331" }, expect: {}, mode: "subset", forbidKeys: ["FullName", "DateOfBirth", "PassportNumber", "name", "dob", "passport"] },
+          ],
+        },
+      },
       visibleTests: [
-        { id: "vt1", description: "Credential issued by a trusted issuer after KYC", type: "concept", concepts: ["credential", "kyc"], weight: 10, isVisible: true },
-        { id: "vt2", description: "Verifiable credential used to prove eligibility", type: "concept", concepts: ["verifiable credential"], weight: 10, isVisible: true },
-        { id: "vt3", description: "Personal data kept off-ledger for privacy", type: "concept", concepts: ["privacy", "pii"], weight: 10, isVisible: true },
+        { id: "vt1", description: "Credential binds subject, issuer, and the KYC type", type: "execution", check: "credentialCore", weight: 15, isVisible: true },
+        { id: "vt2", description: "Credential expires when the KYC validity lapses", type: "execution", check: "expirySet", weight: 20, isVisible: true },
+        { id: "vt3", description: "No personal data is written to the ledger", type: "execution", check: "noPiiOnLedger", weight: 25, isVisible: true },
       ],
       hiddenTests: [
-        { id: "ht1", description: "Revocation pathway on lapsed KYC or sanctions match", type: "concept", concepts: ["revocation"], weight: 15, isVisible: false },
-        { id: "ht2", description: "Credential expiry and renewal handled", type: "concept", concepts: ["expiry", "renewal"], weight: 15, isVisible: false },
-        { id: "ht3", description: "DepositAuth used to gate the XRPL account", type: "concept", concepts: ["depositauth"], weight: 15, isVisible: false },
-        { id: "ht4", description: "Sanctions screening tied to credential validity", type: "concept", concepts: ["sanctions", "screening"], weight: 10, isVisible: false },
-        { id: "ht5", description: "Decentralized Identifier anchors the off-ledger identity", type: "concept", concepts: ["decentralized identifier"], weight: 15, isVisible: false },
+        { id: "ht1", description: "Identity evidence is referenced by hash only", type: "execution", check: "hashReference", weight: 15, isVisible: false },
+        { id: "ht2", description: "Expiry follows the validity period, not a constant", type: "execution", check: "renewalWindow", weight: 15, isVisible: false },
+        { id: "ht3", description: "PII stays off-ledger under any field name", type: "execution", check: "noPiiVariants", weight: 10, isVisible: false },
       ],
       scoringRubric: { totalWeight: 100, passMark: 65 },
-      modelAnswer: `XRPL KYC-GATED IDENTITY WORKFLOW - TOKENISED FUND ACCESS\n\n1. IDENTITY ANCHOR (off-ledger PII, on-ledger reference):\n- Each investor is anchored by a Decentralized Identifier (DID) registered on the XRPL via the DID amendment.\n- The DID document points to an off-ledger identity store. No personal data (PII) is ever written to the ledger; only hashes and references are on-chain to protect privacy.\n\n2. CREDENTIAL ISSUANCE (after KYC):\n- The platform's compliance team completes KYC: identity document, proof of address, eligibility classification.\n- Sanctions screening (HMT + OFAC) and PEP screening are run.\n- On success, a trusted issuer issues a Verifiable Credential to the investor's DID, attesting: kyc_passed, investor_eligible, sanctions_cleared, issued_at, expiry date.\n- The credential is recorded on-ledger using the XRPL Credentials feature; the investor accepts it on their account.\n\n3. ON-LEDGER ELIGIBILITY CHECK (before access):\n- The issuing account sets DepositAuth and authorises only accounts that hold a valid, accepted credential from the trusted issuer.\n- Before any token transfer, the platform verifies the recipient holds a current Verifiable Credential that has not expired and has not been revoked.\n- Access is therefore enforced at the XRPL account level via DepositAuth plus credential verification, not a centralised whitelist.\n\n4. EXPIRY AND RENEWAL:\n- Each credential carries an expiry date. On expiry the credential is no longer valid and access stops.\n- Renewal requires a refreshed KYC review and re-screening, after which a new credential is issued and the old one replaced.\n\n5. REVOCATION:\n- If KYC lapses, eligibility changes, or a sanctions match occurs, the issuer performs revocation of the credential.\n- Revocation immediately invalidates on-ledger access; DepositAuth authorisation for that account is removed so it can no longer receive the token.\n\n6. ONGOING SANCTIONS SCREENING:\n- Sanctions screening runs continuously, not just at onboarding. A new screening hit triggers revocation and blocks further transfers.\n\nPRIVACY SUMMARY:\n- PII off-ledger, credentials and DID references on-ledger, reusable across products without re-disclosing personal data.`,
-      explanation: "XRPL DIDs and Credentials let a platform gate access by verifiable eligibility rather than a centralised list, while DepositAuth enforces it at the account level. Personal data stays off-ledger; only credential references and revocation status are on-chain.",
-      tags: ["XRPL", "identity", "DID", "credentials", "KYC", "DepositAuth", "privacy"],
+      modelAnswer: `function buildKycCredential({ subjectAccount, issuerAccount, kycPassedAt, validityDays, evidenceHash }) {
+  return {
+    CredentialType: "KYC",
+    Subject: subjectAccount,
+    Issuer: issuerAccount,
+    // The ledger is public and permanent: identity evidence goes on-chain
+    // as a hash reference only. The PII stays in the off-ledger KYC store.
+    EvidenceHash: evidenceHash,
+    // Credentials lapse with KYC - a stale review cannot keep granting
+    // access. Renewal issues a fresh credential after re-screening.
+    Expiration: kycPassedAt + validityDays * 86400,
+  }
+}`,
+      explanation: "Two failures hide in the original. First, writing name, date of birth, and passport number into an XRPL object publishes them permanently - the GDPR right to erasure cannot be honoured on an append-only ledger, so the only compliant design keeps PII off-chain and anchors it by hash. Second, a credential without an Expiration outlives the KYC review it attests to, so access persists after the verification has gone stale. The model answer simply refuses the PII inputs - the deepest fix in legal engineering is often what you leave out.",
+      tags: ["XRPL", "identity", "DID", "credentials", "KYC", "privacy", "GDPR", "executable"],
       isXrplRelated: true,
       requiresXrplTestnet: false,
-      estimatedMinutes: 35,
+      estimatedMinutes: 30,
       maxScore: 100,
     },
 
@@ -843,12 +1202,13 @@ function buildEscrow({ destination, amountXrp, now }) {
   for (const ch of challenges) {
     // update mirrors create so content fixes to existing challenges actually
     // apply on redeploy (update: {} would leave stale rows in place forever).
+    // published defaults to true; a challenge can opt out (retired content).
     await prisma.challenge.upsert({
       where: { slug: ch.slug },
       update: { ...ch },
       create: {
-        ...ch,
         published: true,
+        ...ch,
       },
     })
   }

@@ -8,6 +8,13 @@ export interface FunctionCase {
   label: string
   input: Record<string, unknown>
   expect: unknown
+  // "exact" (default) requires deep equality. "subset" requires every key in
+  // `expect` to match the output but allows extra keys - the right mode for
+  // transaction-shaped outputs where candidates may add harmless fields.
+  mode?: "exact" | "subset"
+  // Keys that must NOT appear in the output (subset mode) - e.g. personal data
+  // that must never be written to the ledger.
+  forbidKeys?: string[]
 }
 
 export interface FunctionSpec {
@@ -59,7 +66,27 @@ export function evaluateGroup(
     if (!out.ok) {
       return { passed: false, feedback: `${c.label}: your code threw an error (${out.error}).` }
     }
-    if (!deepEqual(out.value, c.expect)) {
+    if (c.mode === "subset") {
+      const val = out.value
+      if (!val || typeof val !== "object") {
+        return { passed: false, feedback: `${c.label}: expected an object, got ${show(val)}.` }
+      }
+      const obj = val as Record<string, unknown>
+      const exp = (c.expect ?? {}) as Record<string, unknown>
+      for (const key of Object.keys(exp)) {
+        if (!deepEqual(obj[key], exp[key])) {
+          return {
+            passed: false,
+            feedback: `${c.label}: field "${key}" expected ${show(exp[key])}, got ${show(obj[key])}.`,
+          }
+        }
+      }
+      for (const key of c.forbidKeys ?? []) {
+        if (key in obj) {
+          return { passed: false, feedback: `${c.label}: field "${key}" must not be present.` }
+        }
+      }
+    } else if (!deepEqual(out.value, c.expect)) {
       return {
         passed: false,
         feedback: `${c.label}: expected ${show(c.expect)}, got ${show(out.value)}.`,

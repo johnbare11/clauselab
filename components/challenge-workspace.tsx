@@ -123,7 +123,7 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
   const buildExecutablePartial = (model: string): string => {
     const stripped = model
       .split("\n")
-      .filter((l) => !/CancelAfter|refundable|within 30 days/i.test(l))
+      .filter((l) => !/CancelAfter/.test(l))
       .join("\n")
     // If nothing changed (model didn't match), fall back to the starter so the
     // editor still holds runnable code rather than a broken truncation.
