@@ -84,6 +84,7 @@ interface Props {
 export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
   const [answer, setAnswer] = useState(challenge.starterMaterial || "")
   const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [result, setResult] = useState<SubmissionResult | null>(null)
   const [activeTab, setActiveTab] = useState<"problem" | "results">("problem")
   const [visibleRunResults, setVisibleRunResults] = useState<TestResult[] | null>(null)
@@ -171,6 +172,7 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
   const submit = async () => {
     if (!answer.trim() || submitting) return
     setSubmitting(true)
+    setSubmitError(null)
     try {
       const res = await fetch("/api/submissions", {
         method: "POST",
@@ -182,6 +184,9 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
         }),
       })
       const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data?.error || `Submission failed (${res.status})`)
+      }
 
       // Guest demo runs return the graded feedback inline (the detail endpoint is
       // auth-gated); signed-in runs fetch the persisted submission detail.
@@ -195,6 +200,7 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
       setActiveTab("results")
     } catch (e) {
       console.error(e)
+      setSubmitError(e instanceof Error ? e.message : "Submission failed - please try again.")
     } finally {
       setSubmitting(false)
     }
@@ -296,6 +302,9 @@ export function ChallengeWorkspace({ challenge, ledgerInfo, isXrpl }: Props) {
             <span className="text-xs text-gray-600">{challenge.estimatedMinutes} min estimated</span>
           </div>
           <div className="flex items-center gap-2">
+            {submitError && (
+              <span className="text-[11px] text-red-400">{submitError}</span>
+            )}
             {challenge.isExecutable && submitting && (
               <span className="flex items-center gap-1.5 text-[11px] text-blue-300/90">
                 <span className="inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse" />

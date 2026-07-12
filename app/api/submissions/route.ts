@@ -19,15 +19,9 @@ export async function POST(req: NextRequest) {
   const challenge = await db.challenge.findUnique({ where: { id: challengeId } })
   if (!challenge) return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
 
-  const isExecutable = isExecutionSpec(challenge.expectedSolution)
-
-  // Guest grading: assessors reviewing the demo can run the flagship executable
-  // challenge and see the full score + live Testnet artifacts without an account.
-  // It is scoped to executable challenges only (limiting faucet exposure) and is
-  // never persisted - anonymous runs don't write submissions or track progress.
-  if (!userId && !isExecutable) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  // Guest grading: assessors reviewing the demo can submit any challenge and see
+  // the full score without an account. Guest runs are never persisted - they
+  // don't write submissions, touch progress, or appear on the leaderboard.
 
   const allTests = [
     ...(challenge.visibleTests as unknown as TestCase[]).map((t: TestCase) => ({ ...t, isVisible: true })),
